@@ -50,25 +50,20 @@ def detect_language(text):
         'rate', 'drop', 'event', 'unique', 'skill'
     ]
 
-    # Türkçe karakter kontrolü
     turkish_chars = set('çğıöşüÇĞİÖŞÜ')
     if any(c in turkish_chars for c in text):
         return 'tr'
-
-    # Türkçe kelime kontrolü
     if any(word in text.lower() for word in tr_keywords):
         return 'tr'
-
-    # İngilizce kelime kontrolü
     if any(word in text.lower() for word in en_keywords):
         return 'en'
 
-    # Karışık dil → daha uzun kelime ağırlığı
     tr_score = sum(text.lower().count(w) for w in tr_keywords)
     en_score = sum(text.lower().count(w) for w in en_keywords)
 
     return 'tr' if tr_score >= en_score else 'en'
-    
+
+
 # AI yanıt üretme
 async def get_ai_response(user_message, language):
     kb = load_knowledge_base()
@@ -116,22 +111,21 @@ CEVAP FORMATIN:
 # Bilgi güncelleme
 def update_knowledge(new_info):
     kb = load_knowledge_base()
-    lines = kb.split('\n')
-    
-    # Basit güncelleme mantığı: yeni bilgiyi sona ekle
-    # Gelişmiş sürümde konu tespiti yapılabilir
     updated_kb = kb + f"\n\n[UPDATE_{datetime.now().strftime('%Y%m%d_%H%M%S')}]\n{new_info}\n"
     save_knowledge_base(updated_kb)
     return True
 
+
+# Bot Ready
 @bot.event
 async def on_ready():
     print(f'✅ {bot.user} olarak giriş yapıldı!')
     print(f'Bot ID: {bot.user.id}')
 
+
+# TicketTool kanal güncelleme → yeni ticket mesajı
 @bot.event
 async def on_guild_channel_update(before, after):
-    # TicketTool yeni ticket açtığında kanal adı değişiyor
     if before.name != after.name and "ticket" in after.name.lower():
         try:
             await after.send(
@@ -145,14 +139,16 @@ async def on_guild_channel_update(before, after):
         except Exception as e:
             print(f"[ERROR] Ticket hoş geldin mesajı gönderilemedi: {e}")
 
+
+# FINAL — Tek cevap veren on_message
 @bot.event
 async def on_message(message):
 
-    # Bot mesajlarına asla tepki verme
+    # Bot mesajlarına tepki verme
     if message.author.bot:
         return
 
-    # Learning channel kontrolü
+    # Learning Kanalı
     if message.channel.id == LEARNING_CHANNEL_ID:
         if message.author.id in ALLOWED_USER_IDS or not ALLOWED_USER_IDS:
             try:
@@ -162,60 +158,30 @@ async def on_message(message):
                 await message.add_reaction('❌')
         return
 
-    # Ticket kanalı değilse komutları çalıştır ve çık
+    # Ticket değilse sadece komut çalıştır
     if 'ticket' not in message.channel.name.lower():
         await bot.process_commands(message)
         return
 
-    # Kanal devre dışı ise dur
+    # Ticket devre dışı ise
     if message.channel.id in disabled_channels:
         return
 
-    # AI yanıt üret
+    # AI Yanıtı
     language = detect_language(message.content)
     response = await get_ai_response(message.content, language)
 
-    # AI cevabı gönder
     await message.reply(response)
 
-    # (En sonda) komutları işle
+    # Komutlar en sonda
     await bot.process_commands(message)
-    
-    # Learning channel kontrolü
-    if message.channel.id == LEARNING_CHANNEL_ID:
-        if message.author.id in ALLOWED_USER_IDS or not ALLOWED_USER_IDS:
-            try:
-                update_knowledge(message.content)
-                await message.add_reaction('✅')
-            except:
-                await message.add_reaction('❌')
-        return
-    
-    # Ticket kanalı kontrolü (kanal adı "ticket" içeriyorsa)
-    if 'ticket' not in message.channel.name.lower():
-        return
-    
-    # Kanal devre dışı mı?
-    if message.channel.id in disabled_channels:
-        return
-    
-    # AI yanıt üret
-    language = detect_language(message.content)
-    response = await get_ai_response(message.content, language)
-    
-    # Support etiketleme kontrolü
-    if "@Support" in response or "kesin bir bilgiye sahip değilim" in response:
-        if SUPPORT_ROLE_ID:
-            response = response.replace("@Support", f"<@&{SUPPORT_ROLE_ID}>")
-    
-    await message.reply(response)
+
 
 # Komutlar
 @bot.command(name='ai-restart')
 async def ai_restart(ctx):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
         return
-    
     load_knowledge_base()
     await ctx.send("Senin için yeniden hazırım <3")
 
@@ -223,7 +189,6 @@ async def ai_restart(ctx):
 async def ai_add(ctx, *, new_info: str):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
         return
-    
     try:
         update_knowledge(new_info)
         await ctx.send("✅ Bilgi başarıyla eklendi/güncellendi!")
@@ -235,7 +200,6 @@ async def ai_dur(ctx):
     if 'ticket' not in ctx.channel.name.lower():
         await ctx.send("⚠️ Bu komut sadece ticket kanallarında kullanılabilir!")
         return
-    
     disabled_channels.add(ctx.channel.id)
     await ctx.send("⏸️ Bu kanalde AI devre dışı bırakıldı.")
 
@@ -244,7 +208,6 @@ async def ai_go(ctx):
     if 'ticket' not in ctx.channel.name.lower():
         await ctx.send("⚠️ Bu komut sadece ticket kanallarında kullanılabilir!")
         return
-    
     disabled_channels.discard(ctx.channel.id)
     await ctx.send("▶️ Bu kanalde AI aktif edildi.")
 
@@ -252,7 +215,6 @@ async def ai_go(ctx):
 async def ai_test(ctx):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
         return
-    
     try:
         test_response = await get_ai_response("Merhaba, test mesajı", "tr")
         await ctx.send(f"✅ Bot çalışıyor!\n\nTest cevabı: {test_response[:200]}...")
@@ -263,7 +225,6 @@ async def ai_test(ctx):
 async def ailearn(ctx, *, new_info: str):
     if ctx.channel.id != LEARNING_CHANNEL_ID:
         return
-    
     if ctx.author.id in ALLOWED_USER_IDS or not ALLOWED_USER_IDS:
         try:
             update_knowledge(new_info)
@@ -271,9 +232,6 @@ async def ailearn(ctx, *, new_info: str):
         except Exception as e:
             await ctx.send(f"❌ Hata: {str(e)}")
 
+
+# Bot start
 bot.run(DISCORD_TOKEN)
-
-
-
-
-
