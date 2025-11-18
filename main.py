@@ -39,35 +39,63 @@ def save_knowledge_base(content):
 
 # Dil algılama
 def detect_language(text):
-    turkish_chars = set('çğıöşüÇĞİÖŞÜ')
-    if any(char in text for char in turkish_chars):
-        return 'tr'
-    if any(ord(char) > 127 for char in text):
-        return 'en'
-    turkish_words = ['nedir', 'nasıl', 'ne', 'bu', 'şu', 'var', 'yok', 'için']
-    if any(word in text.lower() for word in turkish_words):
-        return 'tr'
-    return 'en'
+    tr_keywords = [
+        'nedir', 'nasil', 'ne zaman', 'neden', 'var mi', 
+        'kac', 'fiyat', 'sure', 'gunde', 'oran', 'drobu',
+        'buffer', 'event', 'unique', 'slot', 'mob', 'giris'
+    ]
 
+    en_keywords = [
+        'what', 'when', 'how', 'where', 'why',
+        'rate', 'drop', 'event', 'unique', 'skill'
+    ]
+
+    # Türkçe karakter kontrolü
+    turkish_chars = set('çğıöşüÇĞİÖŞÜ')
+    if any(c in turkish_chars for c in text):
+        return 'tr'
+
+    # Türkçe kelime kontrolü
+    if any(word in text.lower() for word in tr_keywords):
+        return 'tr'
+
+    # İngilizce kelime kontrolü
+    if any(word in text.lower() for word in en_keywords):
+        return 'en'
+
+    # Karışık dil → daha uzun kelime ağırlığı
+    tr_score = sum(text.lower().count(w) for w in tr_keywords)
+    en_score = sum(text.lower().count(w) for w in en_keywords)
+
+    return 'tr' if tr_score >= en_score else 'en'
+    
 # AI yanıt üretme
 async def get_ai_response(user_message, language):
     kb = load_knowledge_base()
-    
-    system_prompt = f"""Sen Jaynora AI Support (SroEdge) botsun.
 
-KURALLAR:
-1. SADECE knowledge base'deki bilgileri kullan
-2. Tahmin yapma, uydurma, internetten bilgi alma
-3. Bilgi yoksa: "@Support rolünü etiketle ve 'Bu konu hakkında kesin bir bilgiye sahip değilim, yetkili birime yönlendiriyorum'"
-4. Cevaplar: kısa, net, madde madde
-5. Samimi ama profesyonel üslup
-6. Emoji kullan: ℹ️ (bilgi), ⚠️ (uyarı), ✅ (başarı), 😊💙 (destek)
+    system_prompt = f"""
+Sen Jaynora AI Support botsun. Profesyonel bir oyun yoneticisi gibi cevap verirsin.
+
+GENEL KURALLAR:
+1. Sadece knowledge_base icindeki bilgilerle cevap ver.
+2. Asla uydurma, tahmin yapma, baska sunuculardan bilgi getirme.
+3. Bilgi yoksa Support rolune yonlendir.
+4. Tum cevaplari kısa, net ve madde madde yaz.
+5. Gereksiz cumle, selamlama, tekrar yok.
+6. En fazla 1–2 emoji kullanabilirsin.
+7. Cevaplarda asiri uzun paragraflardan kacın.
+8. Oyuncuya karsi GM tarzi profesyonel + sicakkanli ton kullan.
+9. Kullanicinin dili: {language}
 
 KNOWLEDGE BASE:
 {kb}
 
-Kullanıcı dili: {language}
-{'Türkçe cevap ver' if language == 'tr' else 'Respond in English'}"""
+CEVAP FORMATIN:
+- Madde madde
+- Kısa ve net
+- Bilgi varsa direkt ver
+- Bilgi yoksa: "Bu konu hakkında kesin bir bilgi bulunmuyor. Seni ilgili birime yonlendiriyorum <@&{SUPPORT_ROLE_ID}>"
+"""
 
     try:
         response = openai.ChatCompletion.create(
@@ -76,12 +104,14 @@ Kullanıcı dili: {language}
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            temperature=0.3,
-            max_tokens=800
+            temperature=0.25,
+            max_tokens=600
         )
         return response.choices[0].message.content
+
     except Exception as e:
-        return f"⚠️ Bir hata oluştu: {str(e)}"
+        return f"⚠️ Bir hata olustu: {str(e)}"
+
 
 # Bilgi güncelleme
 def update_knowledge(new_info):
@@ -199,3 +229,4 @@ async def ailearn(ctx, *, new_info: str):
             await ctx.send(f"❌ Hata: {str(e)}")
 
 bot.run(DISCORD_TOKEN)
+
