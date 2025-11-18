@@ -1,0 +1,371 @@
+===============================================================
+                 JAYNORA KNOWLEDGE BASE – FINAL
+===============================================================
+Bu dosya Jaynora AI Support'un oyun içi tüm cevaplarýný oluþturur.
+AI dýþ kaynak kullanamaz, tahmin yapamaz, sadece buradaki bilgilerle konuþur.
+===============================================================
+
+
+===============================================================
+[SYSTEM_CORE]
+===============================================================
+Mastery Limit: 80  
+PC Limit: 2 + 1 Stall Char (stall karakter 1 level olmalý)  
+Reverse Scroll: Kapalý  
+PK Sistemi: Kapalý  
+Þehirde yere item atma: Kapalý  
+Stat Reset Hakký: Günde 1 kez  
+Job Reverse Süresi: 3 dakika  
+Buff Süreleri: 1 gün  
+Durability kaybý azaltýldý  
+Quick Bar (Space tuþu) düzeltildi  
+
+
+===============================================================
+[SYSTEM_STALL]
+===============================================================
+• Stall char leveli 1 olmalýdýr.  
+• Ýlk giriþ stall char ile yapýlmalý ve stall açýlmýþ olmalýdýr.  
+• Stall bozulursa 60 saniye sonra karakter oyundan atýlýr.  
+• PC limiti: 2 normal + 1 stall char.  
+• Stall sistemi stabilize edilmiþtir.  
+
+
+===============================================================
+[SYSTEM_VALUES]
+===============================================================
+HP/MP Potion stack: 10.000 (F10 – Premium)  
+Ok fiyatý: 1 adet = 10 gold  
+2dg & 3dg item satýþ fiyatý: 3.000 gold  
+Bankaya item býrakma ücreti: 1 gold  
+7 gün %100 speed (Premium): 100 Silk  
+
+
+===============================================================
+[MAP_AND_SLOTS]
+===============================================================
+• 1–16 level Normal & Homojen tüm slotlar ? Jangan Teleport  
+• Premium slotlar: Downhang Cave ? 4 adet clone map  
+• Premiumsuz karakterlere 2 ek homojen slot eklendi  
+• 16+ level normal slotlardan 2dg item kaldýrýldý ? 3dg normal & SOX düþüyor  
+
+
+===============================================================
+[LOGIN_EVENT]
+===============================================================
+Yeni 1–15 level solo Login Event:  
+• Villain Bear ? EXP +%10, 2dg SOS  
+• 10 dakika sonra Event Unique spawn  
+• Event Unique drop: %50 2dg Moon  
+• En yüksek hasar veren ilk 8 oyuncu ödül alýr  
+
+
+===============================================================
+[WINTER_EVENT]
+===============================================================
+Snow Slave ? 10 Snow Flake ? So-Ok ödülleri:  
+• Duke Dress  
+• 3dg Stone  
+• Reverse  
+• High Speed Return  
+• %50 Speed  
+• 500 Potion  
+• %1 Phy/Mag  
+• %3 INT/STR  
+• Çeþitli petler  
+
+Ek bilgiler:  
+• Snow Flake 16 level moblardan da düþer  
+• Winter dress switcher: 1 gold  
+• Winter event dress set ödüllere eklendi  
+
+
+===============================================================
+[NPC_SHOPS]
+===============================================================
+Gold Shop & Silk Shop:  
+• Flag Switcher  
+• Devil Switcher  
+• Sultan Dress  
+• Stat Reset Scroll (daily)  
+• Blue Remover  
+• Speed 7-day 100% (Premium)  
+
+
+===============================================================
+[SKILL_UPDATES]
+===============================================================
+Light:  
+• Ghost Walk – Phantom ? Light skill aðacýna eklenmiþtir  
+• Light Run Speed: %50  
+
+Pacheon:  
+• Strong Bow Spirit: %30 stun  
+• 5 Arrow Combo: %3 knockback  
+
+Heuksal:  
+• Flying Dragon Fly kaldýrýldý ? Flying Dragon Flash eklendi  
+
+STR Karakterler:  
+• Snow & Nuker skilleri kaldýrýldý  
+• Stat reset sonrasý otomatik kapanýr  
+
+
+===============================================================
+[TOKGUI_DUNGEON]
+===============================================================
+• Togui Dungeon aktif  
+• Tüm canavarlar 3dg stone drop  
+• Togui Elder ? %1 3dg Sun Accessory  
+
+
+===============================================================
+[JOB_SYSTEM]
+===============================================================
+Job Kurallarý:  
+• Zerk yasaktýr  
+• Reverse yasaktýr  
+• Günlük kervan limiti dolar ? limiti aþan oyuncu puan alamaz  
+• Günlük kervan limitini tamamlayan oyuncular: 20m gold  
+
+Job Arena:  
+• 2 INT + 2 STR þeklinde optimize edildi  
+
+
+===============================================================
+[RANK_REWARDS_GENERAL]
+===============================================================
+Trader / Thief / Hunter / Event / Unique Rank 1 Ödülleri:  
+• King Tag  
+• 750 Silk  
+• 1000 Gift Silk  
+• 100 All Elixir  
+• 20 Immortal  
+• 20 Astral  
+• 50 Lucky  
+• 50 Steady  
+• 10 Sabakun  
+• 1 Lottery  
+• 50m Gold  
+• %5 Alchemy Boost  
+
+
+===============================================================
+[RANK_SURVIVAL_MADNESS_WOL]
+===============================================================
+Rank 1:  
+• 8 Immortal  
+• 8 Astral  
+• 15 Lucky  
+• 15 Steady  
+• 8 Magic Pop  
+• 50 All Elixir  
+• %3 Boost  
+• 100 Silk  
+• 150 Gift Silk  
+
+Rank 2:  
+• 6 Immortal  
+• 6 Astral  
+• 10 Lucky  
+• 10 Steady  
+• 6 Pop  
+• 40 All Elixir  
+• %2 Boost  
+• 75 Silk  
+• 100 Gift Silk  
+
+Rank 3:  
+• 4 Immortal  
+• 4 Astral  
+• 7 Lucky  
+• 7 Steady  
+• 4 Pop  
+• 30 All Elixir  
+• %2 Boost  
+• 50 Silk  
+• 80 Gift Silk  
+
+
+===============================================================
+[BATTLE_GOLEM_EVENT]
+===============================================================
+• 10 tur  
+• Haritada rastgele spawn  
+Ödüller:  
+• 10 Gift Silk  
+• 3 STR Stone  
+• 3 INT Stone  
+• 1 Immortal  
+• 1 Astral  
+• 10 Weapon Elixir  
+
+
+===============================================================
+[EVENT_RACE]
+===============================================================
+Race Event:  
+• 4 tur  
+• Her tur unique kesilir  
+• 9–50 arasý oyuncuya ödüller çýkar  
+• Finalde tek kazanan  
+
+Ödüller:  
+Beginning:  
+• 300k Gold, 10 Gift Silk, 10 Weapon Elixir  
+
+Quarter Final:  
+• 500k Gold, 15 Gift Silk, 15 Elixir, 3 Immortal, 3 Astral  
+
+Semi Final:  
+• 1m Gold, 20 Gift Silk, 20 Elixir, 5 Immortal, 5 Astral  
+
+Final:  
+• 5m Gold, 50 Gift Silk, 30 Elixir, 7 Immortal, 7 Astral, 5 STR Stone  
+
+
+===============================================================
+[UNIQUE_TIGER_GIRL]
+===============================================================
+Tür: INT & STR  
+Drops:  
+• %100 2dg Moon  
+• %10 3dg SOS Weapon  
+Parti ile kesilirse:  
+• 5 Weapon Elixir  
+• 5 Gift Silk  
+• 100k Gold  
+Solo kesilirse:  
+• 20 Weapon Elixir  
+• 20 Gift Silk  
+• 500k Gold  
+Spawn: 30 dakika  
+Elite Tiger Girl kaldýrýldý  
+
+
+===============================================================
+[UNIQUE_WHITE_KNIGHT]
+===============================================================
+Tür: INT & STR  
+Ödüller Tiger Girl ile aynýdýr  
+HP düzenlendi  
+Model boyutu küçültüldü  
+
+
+===============================================================
+[UNIQUE_PRINCESS_MIYENE]
+===============================================================
+Tür: INT & STR  
+Ödüller Tiger Girl ile aynýdýr  
+
+
+===============================================================
+[UNIQUE_MEDUSA]
+===============================================================
+Tür: INT & STR + Solo versiyon  
+Drops:  
+• %100 3dg Moon  
+• %20 3dg Sun  
+• 8 Sabakun  
+• 8 Global  
+• %10 Premium  
+Parti Ödülleri:  
+• 50 All Elixir  
+• 200 Gift Silk  
+• 100 Silk  
+• 10m Gold  
+HP & debuff hatalarý düzeltildi  
+
+
+===============================================================
+[UNIQUE_ROC]
+===============================================================
+Tür: INT & STR + Solo versiyon  
+Drops:  
+• %100 3dg Moon  
+• %20 3dg Sun  
+Parti Ödülleri:  
+• 50 All Elixir  
+• 200 Gift Silk  
+• 100 Silk  
+• 10m Gold  
+Vuruþlar & debuff düzeltildi  
+
+
+===============================================================
+[UNIQUE_PVP_ARENA]
+===============================================================
+Drops:  
+• 8 Magic Pop  
+• 8 Reverse  
+• %100 2dg Moon  
+• %50 3dg SOS  
+• %25 3dg Moon  
+• %1 3dg Sun  
+• %1 Premium  
+Ek Ödüller:  
+• 20 All Elixir  
+• 50 Reverse  
+• 5 Immortal  
+• 5 Astral  
+• 50 Gift Silk  
+• 5m Gold  
+
+
+===============================================================
+[UNIQUE_JOB_ARENA]
+===============================================================
+Drops:  
+• %100 3dg SOS  
+• %25 3dg Moon  
+• %1 3dg Sun  
+Parti Ödülleri:  
+• 20 All Elixir  
+• 50 Gift Silk  
+• 50 Silk  
+• 3 Immortal  
+• 3 Astral  
+• 5m Gold  
+
+
+===============================================================
+[UNIQUE_EXP_ARENA]
+===============================================================
+Drops:  
+• %100 2dg Sun  
+• %25 3dg SOS Weapon  
+• %10 3dg Moon  
+• %1 3dg Sun  
+Ek Ödüller:  
+• 20 All Elixir  
+• 50 Gift Silk  
+• 5m Gold  
+
+
+===============================================================
+[UNIQUE_JOB_SPECIAL]
+===============================================================
+Drops:  
+• %100 3dg SOS  
+• %25 3dg Moon  
+• %1 3dg Sun  
+Parti Ödülleri:  
+• 20 All Elixir  
+• 50 Gift Silk  
+• 50 Silk  
+• 3 Immortal  
+• 3 Astral  
+• 5m Gold  
+
+
+===============================================================
+[FIXES]
+===============================================================
+• Janganda yer altýna girme, takýlma, su üstünde yürüme hatalarý düzeltildi  
+• White Knight boyutu küçültüldü  
+• Tiger Girl eliteleri kaldýrýldý  
+• Medusa & Roc debuff sorunlarý düzeltildi  
+• Buffalo HP: 16475 ? 11475  
+• Tüm oyunculara 50 Reverse telafisi verildi  
+• Damage counter sadece unique alanýndaki oyunculara gösterilir  
+• Skill görev itemleri direkt çantaya düþer
