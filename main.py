@@ -130,7 +130,24 @@ async def on_ready():
     print(f'Bot ID: {bot.user.id}')
 
 @bot.event
+async def on_guild_channel_create(channel):
+    # Ticket kanalı mı?
+    if "ticket-" in channel.name.lower():
+        try:
+            await channel.send(
+                "Merhaba! 😊\n"
+                "Destek talebin başarıyla oluşturuldu.\n\n"
+                "Sorunu daha hızlı çözebilmem için lütfen kısaca açıklayarak başla.\n"
+                "• Hangi konuda yardım istiyorsun? (skill / item / unique / event / job / payment / client / teknik)\n"
+                "• Tam olarak ne sorun yaşıyorsun?\n\n"
+                "Hazır olduğunda yazabilirsin!"
+            )
+        except Exception as e:
+            print(f"Ticket açılış mesajı gönderilemedi: {e}")
+
+@bot.event
 async def on_message(message):
+
     # Bot kendi mesajlarına cevap vermesin
     if message.author.bot:
         return
@@ -229,4 +246,5 @@ async def ailearn(ctx, *, new_info: str):
             await ctx.send(f"❌ Hata: {str(e)}")
 
 bot.run(DISCORD_TOKEN)
+
 
