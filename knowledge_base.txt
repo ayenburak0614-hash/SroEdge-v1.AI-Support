@@ -185,7 +185,41 @@ Rank 3:
 - %2 Boost  
 - 50 Silk  
 - 80 Gift Silk  
+===============================================================
+[MADNESS ARENA]
+===============================================================
+Rank 1:  
+- 8 Immortal  
+- 8 Astral  
+- 15 Lucky  
+- 15 Steady  
+- 8 Magic Pop  
+- 50 All Elixir  
+- %3 Boost  
+- 100 Silk  
+- 150 Gift Silk  
 
+Rank 2:  
+- 6 Immortal  
+- 6 Astral  
+- 10 Lucky  
+- 10 Steady  
+- 6 Pop  
+- 40 All Elixir  
+- %2 Boost  
+- 75 Silk  
+- 100 Gift Silk  
+
+Rank 3:  
+- 4 Immortal  
+- 4 Astral  
+- 7 Lucky  
+- 7 Steady  
+- 4 Pop  
+- 30 All Elixir  
+- %2 Boost  
+- 50 Silk  
+- 80 Gift Silk  
 
 ===============================================================
 [BATTLE_GOLEM_EVENT]
@@ -369,3 +403,4 @@ Parti Odulleri:
 - Tum oyunculara 50 Reverse telafisi verildi  
 - Damage counter sadece unique alanindaki oyunculara gosterilir  
 - Skill gorev itemleri direkt cantaya duser
+
