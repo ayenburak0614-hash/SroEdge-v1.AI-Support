@@ -148,11 +148,37 @@ async def on_guild_channel_update(before, after):
 @bot.event
 async def on_message(message):
 
-    # Bot kendi mesajlarına cevap vermesin
+    # Bot mesajlarına asla tepki verme
     if message.author.bot:
         return
-    
-    # Komutları işle
+
+    # Learning channel kontrolü
+    if message.channel.id == LEARNING_CHANNEL_ID:
+        if message.author.id in ALLOWED_USER_IDS or not ALLOWED_USER_IDS:
+            try:
+                update_knowledge(message.content)
+                await message.add_reaction('✅')
+            except:
+                await message.add_reaction('❌')
+        return
+
+    # Ticket kanalı değilse komutları çalıştır ve çık
+    if 'ticket' not in message.channel.name.lower():
+        await bot.process_commands(message)
+        return
+
+    # Kanal devre dışı ise dur
+    if message.channel.id in disabled_channels:
+        return
+
+    # AI yanıt üret
+    language = detect_language(message.content)
+    response = await get_ai_response(message.content, language)
+
+    # AI cevabı gönder
+    await message.reply(response)
+
+    # (En sonda) komutları işle
     await bot.process_commands(message)
     
     # Learning channel kontrolü
@@ -246,6 +272,7 @@ async def ailearn(ctx, *, new_info: str):
             await ctx.send(f"❌ Hata: {str(e)}")
 
 bot.run(DISCORD_TOKEN)
+
 
 
 
