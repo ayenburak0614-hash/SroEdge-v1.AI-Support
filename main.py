@@ -402,6 +402,9 @@ async def on_message(message):
             stats['support_escalations'] += 1
             needs_escalation = True
             
+            # ⭐ YENİ: Support etiketlenince AI'ı devre dışı bırak
+            disabled_channels.add(message.channel.id)
+            
             # ⭐ YENİ: 3. escalation'da özel mesaj
             if ticket_data[message.channel.id]['escalations'] >= 3:
                 if language == 'tr':
@@ -411,11 +414,21 @@ async def on_message(message):
             else:
                 response = response.replace("bilgim yok", f"bilgim yok 💙\n\n<@&{SUPPORT_ROLE_ID}>")
                 response = response.replace("don't have info", f"don't have info 💙\n\n<@&{SUPPORT_ROLE_ID}>")
+            
+            # AI devre dışı mesajı ekle
+            if language == 'tr':
+                response += "\n\n🤖 **Not:** Bu ticket için AI desteğini Support ekibine devraldım. Artık bu kanalda cevap vermeyeceğim. İyi çalışmalar! 💙"
+            else:
+                response += "\n\n🤖 **Note:** I've handed over this ticket to the Support team. I won't respond in this channel anymore. Good luck! 💙"
     
     ticket_data[message.channel.id]['ai_responses'] += 1
     
     await message.reply(response)
     print(f"✅ Cevap gönderildi")
+    
+    # ⭐ YENİ: AI devre dışı bırakıldıysa log
+    if needs_escalation:
+        print(f"🔇 AI bu ticket için devre dışı: {message.channel.name}")
 
 # Komutlar
 @bot.command(name='ai-restart')
