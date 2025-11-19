@@ -30,8 +30,28 @@ stats = {
     'turkish_questions': 0,
     'english_questions': 0,
     'support_escalations': 0,
-    'tickets_handled': 0
+    'tickets_handled': 0,
+    'bot_start_time': None
 }
+
+# ⭐ YENİ: Activity log sistemi
+activity_log = []
+MAX_LOG_ENTRIES = 50
+
+def add_to_log(entry_type, channel_name, user, message, language, escalated=False):
+    """Activity log'a yeni giriş ekle"""
+    activity_log.append({
+        'timestamp': datetime.now(),
+        'type': entry_type,
+        'channel': channel_name,
+        'user': str(user),
+        'message': message[:100],
+        'language': language,
+        'escalated': escalated
+    })
+    # Son 50 girişi tut
+    if len(activity_log) > MAX_LOG_ENTRIES:
+        activity_log.pop(0)
 
 # ⭐ YENİ: Ticket takip sistemi
 ticket_data = {}
@@ -332,6 +352,9 @@ async def on_ready():
     print(f'Bot ID: {bot.user.id}')
     print(f'Sunucular: {len(bot.guilds)}')
     
+    # ⭐ YENİ: Bot başlangıç zamanını kaydet
+    stats['bot_start_time'] = datetime.now()
+    
     kb = load_knowledge_base()
     if kb:
         print(f"✅ Knowledge base OK: {len(kb)} karakter")
@@ -446,6 +469,16 @@ async def on_message(message):
             response += "\n\n🤖 **Note:** I've handed over this ticket to the Support team. I won't respond in this channel anymore. Good luck! 💙"
     
     ticket_data[message.channel.id]['ai_responses'] += 1
+    
+    # ⭐ YENİ: Activity log'a ekle
+    add_to_log(
+        'question',
+        message.channel.name,
+        message.author,
+        message.content,
+        language,
+        needs_escalation
+    )
     
     await message.reply(response)
     print(f"✅ Cevap gönderildi")
@@ -564,5 +597,298 @@ async def ailearn(ctx, *, new_info: str):
             print(f"📚 Manuel öğrenme: {ctx.author} - {len(new_info)} karakter")
         except Exception as e:
             await ctx.send(f"❌ Hata: {str(e)}")
+
+# ⭐ YENİ: Admin Panel Komutları
+
+@bot.command(name='ai-logs')
+async def ai_logs(ctx):
+    """Son aktiviteleri göster"""
+    if ctx.channel.id != COMMANDS_CHANNEL_ID:
+        return
+    
+    if not activity_log:
+        await ctx.send("📋 Henüz log kaydı yok.")
+        return
+    
+    # Son 10 girişi al
+    recent_logs = activity_log[-10:]
+    
+    embed = discord.Embed(
+        title="📋 Son Aktiviteler",
+        description=f"Son {len(recent_logs)} aktivite",
+        color=0x00D9FF
+    )
+    
+    for i, log in enumerate(reversed(recent_logs), 1):
+        time_str = log['timestamp'].strftime('%H:%M:%S')
+        lang_flag = '🇹🇷' if log['language'] == 'tr' else '🇬🇧'
+        escalated_icon = '🆘' if log['escalated'] else '✅'
+        
+        value = f"{escalated_icon} {lang_flag} `{time_str}`\n{log['user'][:20]}\n*{log['message'][:50]}...*"
+        
+        embed.add_field(
+            name=f"{i}. {log['channel'][:20]}",
+            value=value,
+            inline=False
+        )
+    
+    embed.set_footer(text="Jaynora AI Activity Log 📊")
+    await ctx.send(embed=embed)
+
+@bot.command(name='ai-knowledge')
+async def ai_knowledge(ctx):
+    """Knowledge base bilgileri"""
+    if ctx.channel.id != COMMANDS_CHANNEL_ID:
+        return
+    
+    kb = load_knowledge_base()
+    
+    if not kb:
+        await ctx.send("❌ Knowledge base yüklenemedi!")
+        return
+    
+    # Kategorileri say
+    categories = kb.count('[')
+    lines = kb.count('\n')
+    words = len(kb.split())
+    
+    embed = discord.Embed(
+        title="📚 Knowledge Base Bilgileri",
+        color=0xFFD700
+    )
+    embed.add_field(name="📊 Toplam Karakter", value=f"{len(kb):,}", inline=True)
+    embed.add_field(name="📝 Toplam Satır", value=f"{lines:,}", inline=True)
+    embed.add_field(name="💬 Toplam Kelime", value=f"{words:,}", inline=True)
+    embed.add_field(name="🗂️ Kategori Sayısı", value=str(categories), inline=True)
+    embed.add_field(name="📅 Son Güncelleme", value="2025-11-19", inline=True)
+    embed.add_field(name="✅ Durum", value="Aktif ve Hazır", inline=True)
+    
+    # Ana kategoriler
+    main_categories = [
+        "SYSTEM", "MAP", "EVENTS", "UNIQUES",
+        "JOBS", "RANKINGS", "SKILLS", "SHOPS", "FIXES"
+    ]
+    
+    embed.add_field(
+        name="📑 Ana Kategoriler",
+        value="\n".join([f"• {cat}" for cat in main_categories]),
+        inline=False
+    )
+    
+    embed.set_footer(text="Knowledge Base Management 🔧")
+    await ctx.send(embed=embed)
+
+@bot.command(name='ai-channels')
+async def ai_channels(ctx):
+    """Kanal durumları"""
+    if ctx.channel.id != COMMANDS_CHANNEL_ID:
+        return
+    
+    embed = discord.Embed(
+        title="🎫 Kanal Durumları",
+        color=0xFF6B6B
+    )
+    
+    # Aktif ticketlar
+    active_tickets = len(ticket_data)
+    embed.add_field(name="🎮 Aktif Ticketlar", value=str(active_tickets), inline=True)
+    
+    # Devre dışı kanallar
+    disabled_count = len(disabled_channels)
+    embed.add_field(name="⏸️ Devre Dışı", value=str(disabled_count), inline=True)
+    
+    # Toplam ticket işlendi
+    embed.add_field(name="✅ Tamamlanan", value=str(stats['tickets_handled']), inline=True)
+    
+    # Aktif ticket detayları
+    if ticket_data:
+        ticket_info = []
+        for channel_id, data in list(ticket_data.items())[:5]:
+            channel = bot.get_channel(channel_id)
+            if channel:
+                duration = datetime.now() - data['created_at']
+                duration_min = duration.seconds // 60
+                lang_flag = '🇹🇷' if data['language'] == 'tr' else '🇬🇧'
+                ticket_info.append(
+                    f"{lang_flag} `{channel.name[:15]}` - {duration_min}dk - {data['message_count']} msg"
+                )
+        
+        if ticket_info:
+            embed.add_field(
+                name="📊 Son Aktif Ticketlar",
+                value="\n".join(ticket_info),
+                inline=False
+            )
+    
+    # Devre dışı kanallar
+    if disabled_channels:
+        disabled_info = []
+        for channel_id in list(disabled_channels)[:5]:
+            channel = bot.get_channel(channel_id)
+            if channel:
+                disabled_info.append(f"⏸️ `{channel.name[:20]}`")
+        
+        if disabled_info:
+            embed.add_field(
+                name="🔇 Devre Dışı Kanallar",
+                value="\n".join(disabled_info),
+                inline=False
+            )
+    
+    embed.set_footer(text="Channel Management 🎛️")
+    await ctx.send(embed=embed)
+
+@bot.command(name='ai-system')
+async def ai_system(ctx):
+    """Sistem durumu"""
+    if ctx.channel.id != COMMANDS_CHANNEL_ID:
+        return
+    
+    # Uptime hesapla
+    if stats['bot_start_time']:
+        uptime = datetime.now() - stats['bot_start_time']
+        hours = uptime.seconds // 3600
+        minutes = (uptime.seconds % 3600) // 60
+        uptime_str = f"{uptime.days}g {hours}s {minutes}dk"
+    else:
+        uptime_str = "Bilinmiyor"
+    
+    embed = discord.Embed(
+        title="🤖 Sistem Durumu",
+        description="Jaynora AI Support Bot Status",
+        color=0x00FF00
+    )
+    
+    # Bot bilgileri
+    embed.add_field(name="🌐 Sunucular", value=str(len(bot.guilds)), inline=True)
+    embed.add_field(name="⏰ Uptime", value=uptime_str, inline=True)
+    embed.add_field(name="🔋 Durum", value="🟢 Online", inline=True)
+    
+    # İstatistikler
+    embed.add_field(name="💬 Toplam Soru", value=str(stats['total_questions']), inline=True)
+    embed.add_field(name="🇹🇷 Türkçe", value=str(stats['turkish_questions']), inline=True)
+    embed.add_field(name="🇬🇧 İngilizce", value=str(stats['english_questions']), inline=True)
+    
+    # Performance
+    embed.add_field(name="🆘 Escalations", value=str(stats['support_escalations']), inline=True)
+    embed.add_field(name="✅ Tickets Handled", value=str(stats['tickets_handled']), inline=True)
+    embed.add_field(name="📋 Log Entries", value=str(len(activity_log)), inline=True)
+    
+    # Knowledge base
+    kb = load_knowledge_base()
+    kb_size = f"{len(kb):,} karakter" if kb else "❌ Yok"
+    embed.add_field(name="📚 Knowledge Base", value=kb_size, inline=True)
+    
+    embed.add_field(name="🎮 Active Tickets", value=str(len(ticket_data)), inline=True)
+    embed.add_field(name="⏸️ Disabled Channels", value=str(len(disabled_channels)), inline=True)
+    
+    embed.set_footer(text=f"Bot Version: 4.0 | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    await ctx.send(embed=embed)
+
+@bot.command(name='ai-reset-stats')
+async def ai_reset_stats(ctx):
+    """İstatistikleri sıfırla"""
+    if ctx.channel.id != COMMANDS_CHANNEL_ID:
+        return
+    
+    # Onay mesajı
+    embed = discord.Embed(
+        title="⚠️ İstatistikleri Sıfırla?",
+        description="Tüm istatistikler sıfırlanacak! Emin misiniz?",
+        color=0xFF0000
+    )
+    embed.add_field(name="📊 Sıfırlanacaklar", value=(
+        "• Toplam soru sayısı\n"
+        "• Dil istatistikleri\n"
+        "• Support yönlendirme\n"
+        "• Ticket sayıları\n"
+        "• Activity log"
+    ))
+    embed.set_footer(text="Onaylamak için: !ai-reset-confirm")
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='ai-reset-confirm')
+async def ai_reset_confirm(ctx):
+    """İstatistikleri sıfırlama onayı"""
+    if ctx.channel.id != COMMANDS_CHANNEL_ID:
+        return
+    
+    global activity_log
+    
+    # İstatistikleri sıfırla
+    stats['total_questions'] = 0
+    stats['turkish_questions'] = 0
+    stats['english_questions'] = 0
+    stats['support_escalations'] = 0
+    stats['tickets_handled'] = 0
+    activity_log = []
+    
+    embed = discord.Embed(
+        title="✅ İstatistikler Sıfırlandı",
+        description="Tüm istatistikler başarıyla sıfırlandı!",
+        color=0x00FF00
+    )
+    embed.add_field(name="🔄 Yeni Başlangıç", value=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='ai-export')
+async def ai_export(ctx):
+    """İstatistikleri dışa aktar"""
+    if ctx.channel.id != COMMANDS_CHANNEL_ID:
+        return
+    
+    # JSON formatında rapor oluştur
+    report = {
+        'timestamp': datetime.now().isoformat(),
+        'stats': stats.copy(),
+        'active_tickets': len(ticket_data),
+        'disabled_channels': len(disabled_channels),
+        'recent_activities': [
+            {
+                'time': log['timestamp'].isoformat(),
+                'channel': log['channel'],
+                'user': log['user'],
+                'language': log['language'],
+                'escalated': log['escalated']
+            }
+            for log in activity_log[-20:]
+        ]
+    }
+    
+    # Bot start time'ı string'e çevir
+    if report['stats']['bot_start_time']:
+        report['stats']['bot_start_time'] = report['stats']['bot_start_time'].isoformat()
+    
+    import json
+    report_json = json.dumps(report, indent=2, ensure_ascii=False)
+    
+    embed = discord.Embed(
+        title="📊 İstatistik Raporu",
+        description="JSON formatında veri dışa aktarma",
+        color=0x9B59B6
+    )
+    embed.add_field(name="📅 Tarih", value=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    embed.add_field(name="📈 Toplam Soru", value=str(stats['total_questions']))
+    embed.add_field(name="🎫 Tickets", value=str(stats['tickets_handled']))
+    
+    # JSON'u code block olarak gönder (Discord limiti 2000 karakter)
+    if len(report_json) < 1900:
+        await ctx.send(embed=embed)
+        await ctx.send(f"```json\n{report_json}\n```")
+    else:
+        # Çok uzunsa özet gönder
+        await ctx.send(embed=embed)
+        await ctx.send("⚠️ Rapor çok uzun, özet gönderiliyor...")
+        summary = {
+            'stats': report['stats'],
+            'active_tickets': report['active_tickets'],
+            'disabled_channels': report['disabled_channels'],
+            'recent_activities_count': len(report['recent_activities'])
+        }
+        if summary['stats']['bot_start_time']:
+            summary['stats']['bot_start_time'] = summary['stats']['bot_start_time']
+        await ctx.send(f"```json\n{json.dumps(summary, indent=2, ensure_ascii=False)}\n```")
 
 bot.run(DISCORD_TOKEN)
