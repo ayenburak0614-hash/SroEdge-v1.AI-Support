@@ -19,10 +19,17 @@ openai.api_key = OPENAI_API_KEY
 intents = discord.Intents.default()
 intents.message_content = True
 intents.messages = True
+intents.guilds = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Devre dışı kanallar listesi
+# Devre dışı kanallar ve istatistikler
 disabled_channels = set()
+stats = {
+    'total_questions': 0,
+    'turkish_questions': 0,
+    'english_questions': 0,
+    'support_escalations': 0
+}
 
 # Knowledge base okuma
 def load_knowledge_base():
@@ -46,13 +53,11 @@ def save_knowledge_base(content):
 
 # Geliştirilmiş dil algılama
 def detect_language(text):
-    # Türkçe karakterler
     turkish_chars = set('çğıöşüÇĞİÖŞÜ')
     if any(char in text for char in turkish_chars):
         print(f"🇹🇷 Turk karakteri algilandi")
         return 'tr'
     
-    # Türkçe kelimeler (daha geniş liste)
     turkish_words = ['nedir', 'nasil', 'ne', 'bu', 'su', 'var', 'yok', 'icin', 
                      'nerede', 'nasil', 'hangi', 'kim', 'ne zaman', 'kac', 
                      'yapilir', 'olur', 'midir', 'medir', 'dir', 'tir',
@@ -66,7 +71,6 @@ def detect_language(text):
         print(f"🇹🇷 {turkish_word_count} Turkce kelime bulundu")
         return 'tr'
     
-    # İngilizce kelimeler
     english_words = ['what', 'how', 'where', 'when', 'who', 'is', 'are', 'the', 'a', 'an']
     english_word_count = sum(1 for word in english_words if word in text_lower)
     
@@ -74,11 +78,10 @@ def detect_language(text):
         print(f"🇬🇧 Ingilizce algilandi")
         return 'en'
     
-    # Varsayılan: Türkçe (çünkü Türk sunucusu)
     print(f"🇹🇷 Varsayilan: Turkce")
     return 'tr'
 
-# AI yanıt üretme
+# ⭐ YENİ: Gelişmiş AI yanıt üretme
 async def get_ai_response(user_message, language):
     kb = load_knowledge_base()
     
@@ -86,37 +89,77 @@ async def get_ai_response(user_message, language):
         return "⚠️ Bilgi bankası yüklenemedi. Lütfen yöneticiye bildirin."
     
     if language == 'tr':
-        system_prompt = f"""Sen Jaynora AI Support (SroEdge) botsun.
+        system_prompt = f"""Sen Jaynora AI Support (SroEdge) botsun - oyuncuların en iyi yardımcısı! 🎮
 
-ÖNEMLİ KURALLAR:
-1. SADECE knowledge base'deki bilgileri kullan - tahmin yapma!
-2. Cevapları TÜRKÇE ver (Türk sunucusuyuz)
-3. Bilgi yoksa: "Bu konuda bilgim yok, <@&{SUPPORT_ROLE_ID}> yardımcı olacaktır"
-4. Kısa, net, madde madde cevapla
-5. Samimi ama profesyonel ol
-6. Emoji kullan: ℹ️ (bilgi), ⚠️ (uyarı), ✅ (başarı), 💙 (destek)
+🎯 KİŞİLİĞİN:
+- Samimi ama profesyonel
+- Hevesli ve yardımsever
+- Oyuncu dostu
+- Emojilerle desteklenmiş açık iletişim
+
+📜 KURALLARIN:
+1. SADECE knowledge base'deki bilgileri kullan - TAHMİN YAPMA!
+2. Cevapları her zaman TÜRKÇE ver
+3. Bilgi yoksa: "Bu konuda bilgim yok, <@&{SUPPORT_ROLE_ID}> ekibi yardımcı olacaktır 💙"
+4. Cevap formatı:
+   • Başlık emoji ile başla (ℹ️📊⚔️🎁)
+   • Madde madde yaz
+   • Kısa ve net ol
+   • Önemli bilgileri **bold** yap
+
+🎨 EMOJİ KULLANIMI:
+• ℹ️ Genel bilgi
+• ⚔️ Savaş/PvP
+• 🎁 Ödüller/Drop
+• 📊 İstatistikler/Limitler
+• ⚠️ Uyarılar
+• ✅ Başarı/Onay
+• 🎮 Oyun mekaniği
+• 💎 Özel itemler
+• 🏆 Event/Yarışmalar
+• 💙 Destek/Yardım
 
 KNOWLEDGE BASE:
 {kb}
 
 Kullanıcı dili: Türkçe
-TÜRKÇE CEVAP VER!"""
+TÜRKÇE, SAMİMİ VE NET CEVAP VER!"""
     else:
-        system_prompt = f"""You are Jaynora AI Support (SroEdge).
+        system_prompt = f"""You are Jaynora AI Support (SroEdge) - players' best helper! 🎮
 
-IMPORTANT RULES:
-1. ONLY use information from knowledge base - no guessing!
-2. Answer in ENGLISH
-3. If no info: "I don't have info about this, <@&{SUPPORT_ROLE_ID}> will help"
-4. Be concise, clear, use bullet points
-5. Friendly but professional tone
-6. Use emojis: ℹ️ (info), ⚠️ (warning), ✅ (success), 💙 (support)
+🎯 YOUR PERSONALITY:
+- Friendly but professional
+- Enthusiastic and helpful
+- Player-friendly
+- Clear communication with emojis
+
+📜 YOUR RULES:
+1. ONLY use information from knowledge base - NO GUESSING!
+2. Always answer in ENGLISH
+3. If no info: "I don't have info about this, <@&{SUPPORT_ROLE_ID}> team will help 💙"
+4. Response format:
+   • Start with emoji header (ℹ️📊⚔️🎁)
+   • Use bullet points
+   • Be concise and clear
+   • **Bold** important info
+
+🎨 EMOJI USAGE:
+• ℹ️ General info
+• ⚔️ Combat/PvP
+• 🎁 Rewards/Drops
+• 📊 Stats/Limits
+• ⚠️ Warnings
+• ✅ Success/Confirm
+• 🎮 Game mechanics
+• 💎 Special items
+• 🏆 Events/Contests
+• 💙 Support/Help
 
 KNOWLEDGE BASE:
 {kb}
 
 User language: English
-RESPOND IN ENGLISH!"""
+RESPOND IN ENGLISH, FRIENDLY AND CLEAR!"""
 
     try:
         print(f"🤖 AI cagrisi yapiliyor... Dil: {language}")
@@ -126,11 +169,19 @@ RESPOND IN ENGLISH!"""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            temperature=0.3,
-            max_tokens=800
+            temperature=0.4,  # Biraz daha yaratıcı
+            max_tokens=1000
         )
         answer = response.choices[0].message.content
         print(f"✅ AI cevap verdi: {len(answer)} karakter")
+        
+        # İstatistik güncelle
+        stats['total_questions'] += 1
+        if language == 'tr':
+            stats['turkish_questions'] += 1
+        else:
+            stats['english_questions'] += 1
+        
         return answer
     except Exception as e:
         print(f"❌ AI hatasi: {e}")
@@ -147,26 +198,73 @@ def update_knowledge(new_info):
     save_knowledge_base(updated_kb)
     return True
 
+# ⭐ YENİ: Ticket hoş geldin mesajı
+async def send_welcome_message(channel, language):
+    if language == 'tr':
+        embed = discord.Embed(
+            title="🎮 Jaynora AI Support'a Hoş Geldin!",
+            description="Merhaba! Ben Jaynora AI, sana yardımcı olmak için buradayım! 💙",
+            color=0x5865F2
+        )
+        embed.add_field(
+            name="📝 Nasıl Yardımcı Olabilirim?",
+            value="• Oyun sistemleri hakkında bilgi\n• Event ve unique detayları\n• Drop ve ödüller\n• Kurallar ve limitler",
+            inline=False
+        )
+        embed.add_field(
+            name="⚠️ Önemli",
+            value="Eğer bilmediğim bir şey sorarsan, destek ekibini etiketleyeceğim!",
+            inline=False
+        )
+        embed.set_footer(text="Sorunu detaylı anlat, sana en iyi şekilde yardımcı olayım! 🚀")
+    else:
+        embed = discord.Embed(
+            title="🎮 Welcome to Jaynora AI Support!",
+            description="Hello! I'm Jaynora AI, here to help you! 💙",
+            color=0x5865F2
+        )
+        embed.add_field(
+            name="📝 How Can I Help?",
+            value="• Game systems info\n• Events and uniques\n• Drops and rewards\n• Rules and limits",
+            inline=False
+        )
+        embed.add_field(
+            name="⚠️ Important",
+            value="If you ask something I don't know, I'll tag the support team!",
+            inline=False
+        )
+        embed.set_footer(text="Describe your issue in detail, I'll help you best! 🚀")
+    
+    await channel.send(embed=embed)
+
 @bot.event
 async def on_ready():
     print(f'✅ {bot.user} olarak giriş yapıldı!')
     print(f'Bot ID: {bot.user.id}')
     print(f'Sunucular: {len(bot.guilds)}')
     
-    # Knowledge base'i kontrol et
     kb = load_knowledge_base()
     if kb:
         print(f"✅ Knowledge base OK: {len(kb)} karakter")
     else:
         print(f"❌ Knowledge base BOŞ!")
+    
+    # Bot status
+    await bot.change_presence(activity=discord.Game(name="🎮 Jaynora'da sorulara cevap veriyorum!"))
+
+# ⭐ YENİ: Ticket açılınca hoş geldin
+@bot.event
+async def on_guild_channel_create(channel):
+    if 'ticket' in channel.name.lower():
+        await asyncio.sleep(2)  # Biraz bekle
+        language = 'tr'  # Varsayılan Türkçe
+        await send_welcome_message(channel, language)
 
 @bot.event
 async def on_message(message):
-    # Bot kendi mesajlarına cevap vermesin
     if message.author.bot:
         return
     
-    # Komutları işle
     await bot.process_commands(message)
     
     # Learning channel kontrolü
@@ -181,11 +279,10 @@ async def on_message(message):
                 print(f"❌ Öğrenme hatası: {e}")
         return
     
-    # Ticket kanalı kontrolü (kanal adı "ticket" içeriyorsa)
+    # Ticket kanalı kontrolü
     if 'ticket' not in message.channel.name.lower():
         return
     
-    # Kanal devre dışı mı?
     if message.channel.id in disabled_channels:
         return
     
@@ -197,8 +294,10 @@ async def on_message(message):
     
     # Support etiketleme kontrolü
     if SUPPORT_ROLE_ID and ("<@&" not in response):
-        if "support" in response.lower() or "yöneticiye" in response.lower() or "bilgim yok" in response.lower():
-            response = response + f"\n\n<@&{SUPPORT_ROLE_ID}>"
+        if "bilgim yok" in response.lower() or "don't have info" in response.lower():
+            response = response.replace("bilgim yok", f"bilgim yok 💙\n\n<@&{SUPPORT_ROLE_ID}>")
+            response = response.replace("don't have info", f"don't have info 💙\n\n<@&{SUPPORT_ROLE_ID}>")
+            stats['support_escalations'] += 1
     
     await message.reply(response)
     print(f"✅ Cevap gönderildi")
@@ -241,29 +340,51 @@ async def ai_go(ctx):
     disabled_channels.discard(ctx.channel.id)
     await ctx.send("▶️ Bu kanalde AI aktif edildi.")
 
+# ⭐ YENİ: Gelişmiş test komutu
 @bot.command(name='ai-test')
 async def ai_test(ctx):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
         return
     
     try:
-        # Knowledge base kontrolü
         kb = load_knowledge_base()
         kb_status = f"✅ {len(kb)} karakter" if kb else "❌ BOŞ!"
         
-        # Test cevabı
         test_response = await get_ai_response("Mastery limiti nedir?", "tr")
         
-        await ctx.send(f"""✅ **Bot Çalışıyor!**
-
-📊 **Durum:**
-- Knowledge Base: {kb_status}
-- Test Dili: Türkçe 🇹🇷
-
-📝 **Test Cevabı:**
-{test_response[:300]}...""")
+        embed = discord.Embed(
+            title="🧪 Bot Test Sonuçları",
+            color=0x00FF00
+        )
+        embed.add_field(name="📊 Knowledge Base", value=kb_status, inline=False)
+        embed.add_field(name="🌍 Test Dili", value="🇹🇷 Türkçe", inline=True)
+        embed.add_field(name="📈 Toplam Soru", value=str(stats['total_questions']), inline=True)
+        embed.add_field(name="🎯 Test Cevabı", value=test_response[:300] + "...", inline=False)
+        embed.set_footer(text="Bot çalışıyor ve hazır! ✅")
+        
+        await ctx.send(embed=embed)
     except Exception as e:
         await ctx.send(f"❌ Hata: {str(e)}")
+
+# ⭐ YENİ: İstatistik komutu
+@bot.command(name='ai-stats')
+async def ai_stats(ctx):
+    if ctx.channel.id != COMMANDS_CHANNEL_ID:
+        return
+    
+    embed = discord.Embed(
+        title="📊 Jaynora AI İstatistikleri",
+        color=0x5865F2
+    )
+    embed.add_field(name="💬 Toplam Soru", value=str(stats['total_questions']), inline=True)
+    embed.add_field(name="🇹🇷 Türkçe", value=str(stats['turkish_questions']), inline=True)
+    embed.add_field(name="🇬🇧 İngilizce", value=str(stats['english_questions']), inline=True)
+    embed.add_field(name="🆘 Support Yönlendirme", value=str(stats['support_escalations']), inline=True)
+    embed.add_field(name="⏸️ Kapalı Kanallar", value=str(len(disabled_channels)), inline=True)
+    embed.add_field(name="🎮 Sunucular", value=str(len(bot.guilds)), inline=True)
+    embed.set_footer(text="Jaynora AI Support 💙")
+    
+    await ctx.send(embed=embed)
 
 @bot.command(name='ailearn')
 async def ailearn(ctx, *, new_info: str):
