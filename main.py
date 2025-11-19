@@ -56,9 +56,9 @@ def save_knowledge_base(content):
     except Exception as e:
         print(f"❌ Knowledge base kaydedilemedi: {e}")
 
-# 🔥 YENİ: Tamamen Düzeltilmiş Dil Algılama
+# 🔥 SON HAL: Kesin Dil Algılama
 def detect_language(text):
-    text_lower = text.lower()
+    text_lower = text.lower().strip()
     
     # 1. ÖNCE: Türkçe karakterler varsa kesinlikle Türkçe
     turkish_chars = set('çğıöşüÇĞİÖŞÜ')
@@ -66,7 +66,18 @@ def detect_language(text):
         print(f"🇹🇷 Türkçe karakter algılandı")
         return 'tr'
     
-    # 2. Yaygın Türkçe kelimeler (İngilizce'de OLMAYAN kelimeler)
+    # 2. KESİN İngilizce kelimeler (bu kelimeler varsa direkt İngilizce)
+    definite_english = ['hello', 'hi', 'hey', 'thanks', 'thank you', 'please', 
+                        'yes', 'no', 'okay', 'ok', 'what', 'how', 'why', 'when',
+                        'where', 'who', 'can you', 'could you', 'would you']
+    
+    # Kesin İngilizce kontrolü
+    for eng_word in definite_english:
+        if eng_word in text_lower:
+            print(f"🇬🇧 Kesin İngilizce kelime bulundu: '{eng_word}'")
+            return 'en'
+    
+    # 3. Türkçe kelimeler (İngilizce'de OLMAYAN kelimeler)
     turkish_keywords = [
         'merhaba', 'selam', 'nedir', 'nasıl', 'neden', 'niye', 'var', 'yok', 
         'evet', 'hayır', 'teşekkür', 'teşekkürler', 'lütfen', 'için', 'ile', 
@@ -76,28 +87,22 @@ def detect_language(text):
         'acaba', 'bana', 'sana', 'onun', 'bizim', 'sizin', 'tamam'
     ]
     
-    # 3. Sadece İngilizce'de olan kelimeler
-    english_only_keywords = [
-        'hello', 'hi', 'hey', 'the', 'is', 'are', 'was', 'were',
-        'have', 'has', 'had', 'do', 'does', 'did', 'can', 'could',
-        'would', 'should', 'will', 'shall', 'may', 'might', 'must',
-        'thank', 'thanks', 'please', 'yes', 'no', 'ok', 'okay'
-    ]
-    
     # Türkçe kelime var mı?
-    has_turkish = any(word in text_lower for word in turkish_keywords)
+    for tr_word in turkish_keywords:
+        if tr_word in text_lower:
+            print(f"🇹🇷 Türkçe kelime bulundu: '{tr_word}'")
+            return 'tr'
     
-    # SADECE İngilizce kelime var mı? (ve Türkçe yok)
-    has_only_english = any(word in text_lower for word in english_only_keywords) and not has_turkish
+    # 4. İngilizce yardımcı fiiller ve makaleler
+    english_grammar = ['the ', ' is ', ' are ', ' was ', ' were ', ' have ', ' has ',
+                       ' do ', ' does ', ' can ', ' could ', ' would ', ' should ']
     
-    if has_turkish:
-        print(f"🇹🇷 Türkçe kelime bulundu: {text[:30]}...")
-        return 'tr'
-    elif has_only_english:
-        print(f"🇬🇧 İngilizce kelime bulundu: {text[:30]}...")
-        return 'en'
+    for eng_grammar in english_grammar:
+        if eng_grammar in f" {text_lower} ":
+            print(f"🇬🇧 İngilizce dilbilgisi bulundu")
+            return 'en'
     
-    # 4. Hiçbir işaret yoksa → Türkçe (Türk sunucusu için varsayılan)
+    # 5. Hiçbiri yoksa → Türkçe (Türk sunucusu için varsayılan)
     print(f"🇹🇷 Varsayılan: Türkçe")
     return 'tr'
 
