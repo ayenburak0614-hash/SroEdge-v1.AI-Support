@@ -56,53 +56,49 @@ def save_knowledge_base(content):
     except Exception as e:
         print(f"❌ Knowledge base kaydedilemedi: {e}")
 
-# ⭐ YENİ: Düzeltilmiş dil algılama
+# 🔥 YENİ: Tamamen Düzeltilmiş Dil Algılama
 def detect_language(text):
-    # Önce Türkçe karakterler kontrol et
-    turkish_chars = set('çğıöşüÇĞİÖŞÜ')
-    if any(char in text for char in turkish_chars):
-        print(f"🇹🇷 Turk karakteri algilandi")
-        return 'tr'
-    
     text_lower = text.lower()
     
-    # Türkçe kelimeler (daha kapsamlı)
-    turkish_words = [
-        'nedir', 'nasil', 'nasıl', 'ne', 'bu', 'şu', 'su', 'var', 'yok', 
-        'için', 'icin', 'nerede', 'hangi', 'kim', 'ne zaman', 
-        'kaç', 'kac', 'yapilir', 'yapılır', 'olur', 'midir', 'medir', 
-        'mı', 'mi', 'mu', 'mü', 'dir', 'dır', 'tir', 'tır',
-        've', 'ile', 'ya', 'veya', 'ama', 'fakat', 'çünkü', 'cunku',
-        'bana', 'benim', 'sana', 'senin', 'onun', 'bizim',
-        'mastery', 'sistem', 'limit', 'odul', 'ödül', 'drop', 'unique',
-        'merhaba', 'selam', 'hey', 'naber', 'nasılsın', 'nasilsin',
-        'teşekkür', 'tesekkur', 'sağol', 'sagol', 'tamam'
-    ]
-    
-    # İngilizce kelimeler
-    english_words = [
-        'what', 'how', 'where', 'when', 'who', 'why',
-        'is', 'are', 'was', 'were', 'be', 'been',
-        'the', 'a', 'an', 'this', 'that', 'these', 'those',
-        'hello', 'hi', 'hey', 'thanks', 'thank you',
-        'can', 'could', 'would', 'should', 'may', 'might',
-        'do', 'does', 'did', 'have', 'has', 'had'
-    ]
-    
-    # Kelimeleri say
-    turkish_count = sum(1 for word in turkish_words if word in text_lower)
-    english_count = sum(1 for word in english_words if word in text_lower)
-    
-    # Karşılaştır
-    if turkish_count > english_count:
-        print(f"🇹🇷 {turkish_count} Turkce kelime bulundu")
+    # 1. ÖNCE: Türkçe karakterler varsa kesinlikle Türkçe
+    turkish_chars = set('çğıöşüÇĞİÖŞÜ')
+    if any(char in text for char in turkish_chars):
+        print(f"🇹🇷 Türkçe karakter algılandı")
         return 'tr'
-    elif english_count > 0:
-        print(f"🇬🇧 {english_count} Ingilizce kelime bulundu")
+    
+    # 2. Yaygın Türkçe kelimeler (İngilizce'de OLMAYAN kelimeler)
+    turkish_keywords = [
+        'merhaba', 'selam', 'nedir', 'nasıl', 'neden', 'niye', 'var', 'yok', 
+        'evet', 'hayır', 'teşekkür', 'teşekkürler', 'lütfen', 'için', 'ile', 
+        'bu', 'şu', 'o', 'ben', 'sen', 'biz', 'siz', 'onlar', 'şey', 'gibi',
+        'ama', 'veya', 've', 'ki', 'mi', 'mu', 'mü', 'mı', 'dir', 'dır',
+        'nerede', 'hangi', 'kim', 'ne', 'kaç', 'olan', 'olur', 'yapılır',
+        'acaba', 'bana', 'sana', 'onun', 'bizim', 'sizin', 'tamam'
+    ]
+    
+    # 3. Sadece İngilizce'de olan kelimeler
+    english_only_keywords = [
+        'hello', 'hi', 'hey', 'the', 'is', 'are', 'was', 'were',
+        'have', 'has', 'had', 'do', 'does', 'did', 'can', 'could',
+        'would', 'should', 'will', 'shall', 'may', 'might', 'must',
+        'thank', 'thanks', 'please', 'yes', 'no', 'ok', 'okay'
+    ]
+    
+    # Türkçe kelime var mı?
+    has_turkish = any(word in text_lower for word in turkish_keywords)
+    
+    # SADECE İngilizce kelime var mı? (ve Türkçe yok)
+    has_only_english = any(word in text_lower for word in english_only_keywords) and not has_turkish
+    
+    if has_turkish:
+        print(f"🇹🇷 Türkçe kelime bulundu: {text[:30]}...")
+        return 'tr'
+    elif has_only_english:
+        print(f"🇬🇧 İngilizce kelime bulundu: {text[:30]}...")
         return 'en'
     
-    # Varsayılan: Türkçe (Türk sunucusu)
-    print(f"🇹🇷 Varsayilan: Turkce")
+    # 4. Hiçbir işaret yoksa → Türkçe (Türk sunucusu için varsayılan)
+    print(f"🇹🇷 Varsayılan: Türkçe")
     return 'tr'
 
 # Gelişmiş AI yanıt üretme
