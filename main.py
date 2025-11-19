@@ -56,33 +56,52 @@ def save_knowledge_base(content):
     except Exception as e:
         print(f"❌ Knowledge base kaydedilemedi: {e}")
 
-# Geliştirilmiş dil algılama
+# ⭐ YENİ: Düzeltilmiş dil algılama
 def detect_language(text):
+    # Önce Türkçe karakterler kontrol et
     turkish_chars = set('çğıöşüÇĞİÖŞÜ')
     if any(char in text for char in turkish_chars):
         print(f"🇹🇷 Turk karakteri algilandi")
         return 'tr'
     
-    turkish_words = ['nedir', 'nasil', 'ne', 'bu', 'su', 'var', 'yok', 'icin', 
-                     'nerede', 'nasil', 'hangi', 'kim', 'ne zaman', 'kac', 
-                     'yapilir', 'olur', 'midir', 'medir', 'dir', 'tir',
-                     'mastery', 'sistem', 'limit', 'odul', 'drop', 'unique',
-                     've', 'ile', 'mi', 'mu', 'mı', 'mü']
-    
     text_lower = text.lower()
-    turkish_word_count = sum(1 for word in turkish_words if word in text_lower)
     
-    if turkish_word_count >= 1:
-        print(f"🇹🇷 {turkish_word_count} Turkce kelime bulundu")
+    # Türkçe kelimeler (daha kapsamlı)
+    turkish_words = [
+        'nedir', 'nasil', 'nasıl', 'ne', 'bu', 'şu', 'su', 'var', 'yok', 
+        'için', 'icin', 'nerede', 'hangi', 'kim', 'ne zaman', 
+        'kaç', 'kac', 'yapilir', 'yapılır', 'olur', 'midir', 'medir', 
+        'mı', 'mi', 'mu', 'mü', 'dir', 'dır', 'tir', 'tır',
+        've', 'ile', 'ya', 'veya', 'ama', 'fakat', 'çünkü', 'cunku',
+        'bana', 'benim', 'sana', 'senin', 'onun', 'bizim',
+        'mastery', 'sistem', 'limit', 'odul', 'ödül', 'drop', 'unique',
+        'merhaba', 'selam', 'hey', 'naber', 'nasılsın', 'nasilsin',
+        'teşekkür', 'tesekkur', 'sağol', 'sagol', 'tamam'
+    ]
+    
+    # İngilizce kelimeler
+    english_words = [
+        'what', 'how', 'where', 'when', 'who', 'why',
+        'is', 'are', 'was', 'were', 'be', 'been',
+        'the', 'a', 'an', 'this', 'that', 'these', 'those',
+        'hello', 'hi', 'hey', 'thanks', 'thank you',
+        'can', 'could', 'would', 'should', 'may', 'might',
+        'do', 'does', 'did', 'have', 'has', 'had'
+    ]
+    
+    # Kelimeleri say
+    turkish_count = sum(1 for word in turkish_words if word in text_lower)
+    english_count = sum(1 for word in english_words if word in text_lower)
+    
+    # Karşılaştır
+    if turkish_count > english_count:
+        print(f"🇹🇷 {turkish_count} Turkce kelime bulundu")
         return 'tr'
-    
-    english_words = ['what', 'how', 'where', 'when', 'who', 'is', 'are', 'the', 'a', 'an']
-    english_word_count = sum(1 for word in english_words if word in text_lower)
-    
-    if english_word_count >= 1:
-        print(f"🇬🇧 Ingilizce algilandi")
+    elif english_count > 0:
+        print(f"🇬🇧 {english_count} Ingilizce kelime bulundu")
         return 'en'
     
+    # Varsayılan: Türkçe (Türk sunucusu)
     print(f"🇹🇷 Varsayilan: Turkce")
     return 'tr'
 
@@ -394,32 +413,36 @@ async def on_message(message):
     ticket_data[message.channel.id]['language'] = language
     response = await get_ai_response(message.content, language)
     
-    # Support etiketleme kontrolü
+    # ⭐ YENİ: Support etiketleme ve AI susturma kontrolü
     needs_escalation = False
-    if SUPPORT_ROLE_ID and ("<@&" not in response):
-        if "bilgim yok" in response.lower() or "don't have info" in response.lower():
-            ticket_data[message.channel.id]['escalations'] += 1
-            stats['support_escalations'] += 1
-            needs_escalation = True
-            
-            # ⭐ YENİ: Support etiketlenince AI'ı devre dışı bırak
-            disabled_channels.add(message.channel.id)
-            
-            # ⭐ YENİ: 3. escalation'da özel mesaj
-            if ticket_data[message.channel.id]['escalations'] >= 3:
-                if language == 'tr':
-                    response += f"\n\n⚠️ **Dikkat:** Birkaç sorunuza cevap veremedim. <@&{SUPPORT_ROLE_ID}> ekibini çağırıyorum, size daha iyi yardımcı olacaklardır! 💙"
-                else:
-                    response += f"\n\n⚠️ **Notice:** I couldn't answer several questions. Calling <@&{SUPPORT_ROLE_ID}> team, they'll help you better! 💙"
-            else:
-                response = response.replace("bilgim yok", f"bilgim yok 💙\n\n<@&{SUPPORT_ROLE_ID}>")
-                response = response.replace("don't have info", f"don't have info 💙\n\n<@&{SUPPORT_ROLE_ID}>")
-            
-            # AI devre dışı mesajı ekle
+    response_lower = response.lower()
+    
+    # Bilgim yok veya Support geçiyorsa
+    if ("bilgim yok" in response_lower or 
+        "don't have info" in response_lower or 
+        "i don't have" in response_lower or
+        "supporter" in response_lower or
+        "support" in response_lower):
+        
+        needs_escalation = True
+        ticket_data[message.channel.id]['escalations'] += 1
+        stats['support_escalations'] += 1
+        
+        # ⭐ YENİ: AI'ı bu ticket için devre dışı bırak
+        disabled_channels.add(message.channel.id)
+        
+        # Support rolünü etiketle (eğer henüz etiketli değilse)
+        if SUPPORT_ROLE_ID and f"<@&{SUPPORT_ROLE_ID}>" not in response:
             if language == 'tr':
-                response += "\n\n🤖 **Not:** Bu ticket için AI desteğini Support ekibine devraldım. Artık bu kanalda cevap vermeyeceğim. İyi çalışmalar! 💙"
+                response += f"\n\n<@&{SUPPORT_ROLE_ID}>"
             else:
-                response += "\n\n🤖 **Note:** I've handed over this ticket to the Support team. I won't respond in this channel anymore. Good luck! 💙"
+                response += f"\n\n<@&{SUPPORT_ROLE_ID}>"
+        
+        # AI devre dışı mesajı ekle
+        if language == 'tr':
+            response += "\n\n🤖 **Not:** Bu ticket için AI desteğini Support ekibine devraldım. Artık bu kanalda cevap vermeyeceğim. İyi çalışmalar! 💙"
+        else:
+            response += "\n\n🤖 **Note:** I've handed over this ticket to the Support team. I won't respond in this channel anymore. Good luck! 💙"
     
     ticket_data[message.channel.id]['ai_responses'] += 1
     
