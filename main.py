@@ -5,9 +5,7 @@ import os
 import json
 from datetime import datetime
 
-# ======================
-# ENVIRONMENT VARIABLES
-# ======================
+# Environment variables
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 SUPPORT_ROLE_ID = int(os.getenv('SUPPORT_ROLE_ID', '0'))
@@ -17,227 +15,267 @@ ALLOWED_USER_IDS = json.loads(os.getenv('ALLOWED_USER_IDS', '[]'))
 
 openai.api_key = OPENAI_API_KEY
 
-# ======================
-# BOT SETUP
-# ======================
+# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.messages = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# AI devre dışı bırakılmış kanallar
+# Devre dışı kanallar listesi
 disabled_channels = set()
 
-# ======================
-# KNOWLEDGE BASE
-# ======================
+# Knowledge base okuma
 def load_knowledge_base():
     try:
         with open('knowledge_base.txt', 'r', encoding='utf-8') as f:
-            return f.read()
-    except:
+            content = f.read()
+            print(f"✅ Knowledge base yuklendi: {len(content)} karakter")
+            return content
+    except Exception as e:
+        print(f"❌ Knowledge base yuklenemedi: {e}")
         return ""
 
+# Knowledge base yazma
 def save_knowledge_base(content):
-    with open('knowledge_base.txt', 'w', encoding='utf-8') as f:
-        f.write(content)
+    try:
+        with open('knowledge_base.txt', 'w', encoding='utf-8') as f:
+            f.write(content)
+        print("✅ Knowledge base kaydedildi")
+    except Exception as e:
+        print(f"❌ Knowledge base kaydedilemedi: {e}")
 
-def update_knowledge(new_info):
-    kb = load_knowledge_base()
-    updated_kb = kb + f"\n\n[UPDATE_{datetime.now().strftime('%Y%m%d_%H%M%S')}]\n{new_info}\n"
-    save_knowledge_base(updated_kb)
-    return True
-
-# ======================
-# LANGUAGE DETECTION
-# ======================
+# Geliştirilmiş dil algılama
 def detect_language(text):
-    tr_keywords = [
-        'nedir', 'nasil', 'ne zaman', 'neden', 'var mi',
-        'kac', 'fiyat', 'sure', 'oran', 'drop', 'giris'
-    ]
-    en_keywords = ['what', 'when', 'how', 'where', 'why', 'rate', 'drop', 'event']
-
+    # Türkçe karakterler
     turkish_chars = set('çğıöşüÇĞİÖŞÜ')
-    if any(c in turkish_chars for c in text):
+    if any(char in text for char in turkish_chars):
+        print(f"🇹🇷 Turk karakteri algilandi")
         return 'tr'
-    if any(w in text.lower() for w in tr_keywords):
+    
+    # Türkçe kelimeler (daha geniş liste)
+    turkish_words = ['nedir', 'nasil', 'ne', 'bu', 'su', 'var', 'yok', 'icin', 
+                     'nerede', 'nasil', 'hangi', 'kim', 'ne zaman', 'kac', 
+                     'yapilir', 'olur', 'midir', 'medir', 'dir', 'tir',
+                     'mastery', 'sistem', 'limit', 'odul', 'drop', 'unique',
+                     've', 'ile', 'mi', 'mu', 'mı', 'mü']
+    
+    text_lower = text.lower()
+    turkish_word_count = sum(1 for word in turkish_words if word in text_lower)
+    
+    if turkish_word_count >= 1:
+        print(f"🇹🇷 {turkish_word_count} Turkce kelime bulundu")
         return 'tr'
-    if any(w in text.lower() for w in en_keywords):
+    
+    # İngilizce kelimeler
+    english_words = ['what', 'how', 'where', 'when', 'who', 'is', 'are', 'the', 'a', 'an']
+    english_word_count = sum(1 for word in english_words if word in text_lower)
+    
+    if english_word_count >= 1:
+        print(f"🇬🇧 Ingilizce algilandi")
         return 'en'
+    
+    # Varsayılan: Türkçe (çünkü Türk sunucusu)
+    print(f"🇹🇷 Varsayilan: Turkce")
+    return 'tr'
 
-    tr_score = sum(text.lower().count(w) for w in tr_keywords)
-    en_score = sum(text.lower().count(w) for w in en_keywords)
-    return 'tr' if tr_score >= en_score else 'en'
-
-# ======================
-# AI RESPONSE
-# ======================
+# AI yanıt üretme
 async def get_ai_response(user_message, language):
     kb = load_knowledge_base()
+    
+    if not kb:
+        return "⚠️ Bilgi bankası yüklenemedi. Lütfen yöneticiye bildirin."
+    
+    if language == 'tr':
+        system_prompt = f"""Sen Jaynora AI Support (SroEdge) botsun.
 
-    system_prompt = f"""
-Sen Jaynora AI Support botsun. Profesyonel bir oyun yöneticisi gibi cevap verirsin.
-
-GENEL KURALLAR:
-1. Sadece knowledge_base içindeki bilgilerle cevap ver.
-2. Asla uydurma bilgi verme.
-3. Bilgi yoksa Support rolüne yönlendir.
-4. Cevaplar kısa, net, madde madde.
-5. Gereksiz cümle yok.
-6. 1–2 emoji serbest.
-7. Profesyonel + samimi ton.
-8. Kullanıcının dili: {language}
+ÖNEMLİ KURALLAR:
+1. SADECE knowledge base'deki bilgileri kullan - tahmin yapma!
+2. Cevapları TÜRKÇE ver (Türk sunucusuyuz)
+3. Bilgi yoksa: "Bu konuda bilgim yok, <@&{SUPPORT_ROLE_ID}> yardımcı olacaktır"
+4. Kısa, net, madde madde cevapla
+5. Samimi ama profesyonel ol
+6. Emoji kullan: ℹ️ (bilgi), ⚠️ (uyarı), ✅ (başarı), 💙 (destek)
 
 KNOWLEDGE BASE:
 {kb}
 
-CEVAP FORMATIN:
-- Madde madde
-- Bilgi varsa direkt ver
-- Bilgi yoksa: "Bu konu hakkında kesin bir bilgi bulunmuyor. Seni ilgili birime yönlendiriyorum <@&{SUPPORT_ROLE_ID}>"
-"""
+Kullanıcı dili: Türkçe
+TÜRKÇE CEVAP VER!"""
+    else:
+        system_prompt = f"""You are Jaynora AI Support (SroEdge).
+
+IMPORTANT RULES:
+1. ONLY use information from knowledge base - no guessing!
+2. Answer in ENGLISH
+3. If no info: "I don't have info about this, <@&{SUPPORT_ROLE_ID}> will help"
+4. Be concise, clear, use bullet points
+5. Friendly but professional tone
+6. Use emojis: ℹ️ (info), ⚠️ (warning), ✅ (success), 💙 (support)
+
+KNOWLEDGE BASE:
+{kb}
+
+User language: English
+RESPOND IN ENGLISH!"""
 
     try:
+        print(f"🤖 AI cagrisi yapiliyor... Dil: {language}")
         response = openai.ChatCompletion.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            temperature=0.25,
-            max_tokens=600
+            temperature=0.3,
+            max_tokens=800
         )
-        return response.choices[0].message.content
-
+        answer = response.choices[0].message.content
+        print(f"✅ AI cevap verdi: {len(answer)} karakter")
+        return answer
     except Exception as e:
-        return f"⚠️ Bir hata oluştu: {e}"
+        print(f"❌ AI hatasi: {e}")
+        if language == 'tr':
+            return f"⚠️ Bir hata oluştu: {str(e)}"
+        else:
+            return f"⚠️ An error occurred: {str(e)}"
 
-# ======================
-# BOT EVENTS
-# ======================
+# Bilgi güncelleme
+def update_knowledge(new_info):
+    kb = load_knowledge_base()
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    updated_kb = kb + f"\n\n[UPDATE_{timestamp}]\n{new_info}\n"
+    save_knowledge_base(updated_kb)
+    return True
+
 @bot.event
 async def on_ready():
-    print(f"✅ {bot.user} giriş yaptı!")
-    print(f"Bot ID: {bot.user.id}")
+    print(f'✅ {bot.user} olarak giriş yapıldı!')
+    print(f'Bot ID: {bot.user.id}')
+    print(f'Sunucular: {len(bot.guilds)}')
+    
+    # Knowledge base'i kontrol et
+    kb = load_knowledge_base()
+    if kb:
+        print(f"✅ Knowledge base OK: {len(kb)} karakter")
+    else:
+        print(f"❌ Knowledge base BOŞ!")
 
-# TicketTool hoş geldin mesajı
-@bot.event
-async def on_guild_channel_update(before, after):
-    if before.name != after.name and "ticket" in after.name.lower():
-        try:
-            await after.send(
-                "Merhaba! 😊\n"
-                "Destek talebin başarıyla oluşturuldu.\n\n"
-                "Sorunu daha hızlı çözebilmem için lütfen kısaca açıklayarak başla.\n"
-                "• Hangi konuda yardım istiyorsun? (skill/item/unique/event/job/payment/client/teknik)\n"
-                "• Tam olarak ne sorun yaşıyorsun?\n\n"
-                "Hazır olduğunda yazabilirsin!"
-            )
-        except Exception as e:
-            print(f"[ERROR] Ticket hoş geldin mesajı gönderilemedi: {e}")
-
-# ======================
-# MAIN MESSAGE HANDLER (ÇİFT CEVAP %100 FIX)
-# ======================
 @bot.event
 async def on_message(message):
-
-    # Bot kendi mesajına tepki vermesin
+    # Bot kendi mesajlarına cevap vermesin
     if message.author.bot:
         return
-
-    # Komutları önceden işle
+    
+    # Komutları işle
     await bot.process_commands(message)
-
-    # Learning Channel kontrolü
+    
+    # Learning channel kontrolü
     if message.channel.id == LEARNING_CHANNEL_ID:
         if message.author.id in ALLOWED_USER_IDS or not ALLOWED_USER_IDS:
             try:
                 update_knowledge(message.content)
-                await message.add_reaction("✅")
-            except:
-                await message.add_reaction("❌")
+                await message.add_reaction('✅')
+                print(f"📚 Otomatik öğrenme: {message.author} - {len(message.content)} karakter")
+            except Exception as e:
+                await message.add_reaction('❌')
+                print(f"❌ Öğrenme hatası: {e}")
         return
-
-    # Ticket değilse AI çalışmaz
-    if "ticket" not in message.channel.name.lower():
+    
+    # Ticket kanalı kontrolü (kanal adı "ticket" içeriyorsa)
+    if 'ticket' not in message.channel.name.lower():
         return
-
-    # AI devre dışı mı?
+    
+    # Kanal devre dışı mı?
     if message.channel.id in disabled_channels:
         return
-
+    
+    print(f"💬 Mesaj alındı: {message.author} - {message.content[:50]}...")
+    
     # AI yanıt üret
     language = detect_language(message.content)
     response = await get_ai_response(message.content, language)
-
-    # Support etiket düzeltmesi
-    if "@Support" in response or "ilgili birime" in response:
-        if SUPPORT_ROLE_ID:
-            response = response.replace("@Support", f"<@&{SUPPORT_ROLE_ID}>")
-
-    # Mesajı gönder
+    
+    # Support etiketleme kontrolü
+    if SUPPORT_ROLE_ID and ("<@&" not in response):
+        if "support" in response.lower() or "yöneticiye" in response.lower() or "bilgim yok" in response.lower():
+            response = response + f"\n\n<@&{SUPPORT_ROLE_ID}>"
+    
     await message.reply(response)
+    print(f"✅ Cevap gönderildi")
 
-# ======================
-# BOT COMMANDS
-# ======================
+# Komutlar
 @bot.command(name='ai-restart')
 async def ai_restart(ctx):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
         return
+    
     load_knowledge_base()
-    await ctx.send("🔄 AI yeniden hazır!")
+    await ctx.send("🔄 Senin için yeniden hazırım! 💙")
 
 @bot.command(name='ai-add')
 async def ai_add(ctx, *, new_info: str):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
         return
+    
     try:
         update_knowledge(new_info)
-        await ctx.send("✅ Bilgi başarıyla eklendi!")
+        await ctx.send("✅ Bilgi başarıyla eklendi/güncellendi!")
     except Exception as e:
-        await ctx.send(f"❌ Hata: {e}")
+        await ctx.send(f"❌ Hata: {str(e)}")
 
 @bot.command(name='ai-dur')
 async def ai_dur(ctx):
-    if "ticket" not in ctx.channel.name.lower():
+    if 'ticket' not in ctx.channel.name.lower():
         await ctx.send("⚠️ Bu komut sadece ticket kanallarında kullanılabilir!")
         return
+    
     disabled_channels.add(ctx.channel.id)
-    await ctx.send("⏸️ AI bu kanalda devre dışı bırakıldı.")
+    await ctx.send("⏸️ Bu kanalde AI devre dışı bırakıldı.")
 
 @bot.command(name='ai-go')
 async def ai_go(ctx):
-    if "ticket" not in ctx.channel.name.lower():
+    if 'ticket' not in ctx.channel.name.lower():
         await ctx.send("⚠️ Bu komut sadece ticket kanallarında kullanılabilir!")
         return
+    
     disabled_channels.discard(ctx.channel.id)
-    await ctx.send("▶️ AI bu kanalda aktif edildi.")
+    await ctx.send("▶️ Bu kanalde AI aktif edildi.")
 
 @bot.command(name='ai-test')
 async def ai_test(ctx):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
         return
+    
     try:
-        test = await get_ai_response("Test mesajı", "tr")
-        await ctx.send(f"✅ Bot çalışıyor!\n\n{test[:200]}...")
+        # Knowledge base kontrolü
+        kb = load_knowledge_base()
+        kb_status = f"✅ {len(kb)} karakter" if kb else "❌ BOŞ!"
+        
+        # Test cevabı
+        test_response = await get_ai_response("Mastery limiti nedir?", "tr")
+        
+        await ctx.send(f"""✅ **Bot Çalışıyor!**
+
+📊 **Durum:**
+- Knowledge Base: {kb_status}
+- Test Dili: Türkçe 🇹🇷
+
+📝 **Test Cevabı:**
+{test_response[:300]}...""")
     except Exception as e:
-        await ctx.send(f"❌ Hata: {e}")
+        await ctx.send(f"❌ Hata: {str(e)}")
 
 @bot.command(name='ailearn')
 async def ailearn(ctx, *, new_info: str):
     if ctx.channel.id != LEARNING_CHANNEL_ID:
         return
+    
     if ctx.author.id in ALLOWED_USER_IDS or not ALLOWED_USER_IDS:
         try:
             update_knowledge(new_info)
-            await ctx.send("📚 Bilgi öğrenildi!")
+            await ctx.send("✅ Bilgi öğrenildi!")
+            print(f"📚 Manuel öğrenme: {ctx.author} - {len(new_info)} karakter")
         except Exception as e:
-            await ctx.send(f"❌ Hata: {e}")
+            await ctx.send(f"❌ Hata: {str(e)}")
 
-# ======================
-# RUN BOT
-# ======================
 bot.run(DISCORD_TOKEN)
