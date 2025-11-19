@@ -4,6 +4,7 @@ import openai
 import os
 import json
 from datetime import datetime
+import asyncio
 
 # Environment variables
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
@@ -28,8 +29,12 @@ stats = {
     'total_questions': 0,
     'turkish_questions': 0,
     'english_questions': 0,
-    'support_escalations': 0
+    'support_escalations': 0,
+    'tickets_handled': 0
 }
+
+# ⭐ YENİ: Ticket takip sistemi
+ticket_data = {}
 
 # Knowledge base okuma
 def load_knowledge_base():
@@ -81,7 +86,7 @@ def detect_language(text):
     print(f"🇹🇷 Varsayilan: Turkce")
     return 'tr'
 
-# ⭐ YENİ: Gelişmiş AI yanıt üretme
+# Gelişmiş AI yanıt üretme
 async def get_ai_response(user_message, language):
     kb = load_knowledge_base()
     
@@ -169,13 +174,12 @@ RESPOND IN ENGLISH, FRIENDLY AND CLEAR!"""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            temperature=0.4,  # Biraz daha yaratıcı
+            temperature=0.4,
             max_tokens=1000
         )
         answer = response.choices[0].message.content
         print(f"✅ AI cevap verdi: {len(answer)} karakter")
         
-        # İstatistik güncelle
         stats['total_questions'] += 1
         if language == 'tr':
             stats['turkish_questions'] += 1
@@ -237,6 +241,71 @@ async def send_welcome_message(channel, language):
     
     await channel.send(embed=embed)
 
+# ⭐ YENİ: Ticket kapanış özeti
+async def send_ticket_summary(channel, ticket_id):
+    if ticket_id not in ticket_data:
+        return
+    
+    data = ticket_data[ticket_id]
+    duration = datetime.now() - data['created_at']
+    duration_str = f"{duration.seconds // 60} dakika" if duration.seconds < 3600 else f"{duration.seconds // 3600} saat"
+    
+    language = data.get('language', 'tr')
+    
+    if language == 'tr':
+        embed = discord.Embed(
+            title="📊 Ticket Özeti",
+            description="Bu ticket kapandı. İşte özet:",
+            color=0x00FF00
+        )
+        embed.add_field(name="⏰ Açık Kalma Süresi", value=duration_str, inline=True)
+        embed.add_field(name="💬 Toplam Mesaj", value=str(data['message_count']), inline=True)
+        embed.add_field(name="🤖 AI Cevapları", value=str(data['ai_responses']), inline=True)
+        embed.add_field(name="🆘 Support Yönlendirme", value=str(data['escalations']), inline=True)
+        
+        if data['escalations'] == 0:
+            embed.add_field(
+                name="✅ Sonuç",
+                value="Sorun AI tarafından çözüldü!",
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="👥 Sonuç",
+                value="Support ekibi devreye girdi.",
+                inline=False
+            )
+        
+        embed.set_footer(text="Jaynora AI Support ile çalıştığımız için teşekkürler! 💙")
+    else:
+        embed = discord.Embed(
+            title="📊 Ticket Summary",
+            description="This ticket is closed. Here's the summary:",
+            color=0x00FF00
+        )
+        embed.add_field(name="⏰ Duration", value=duration_str, inline=True)
+        embed.add_field(name="💬 Total Messages", value=str(data['message_count']), inline=True)
+        embed.add_field(name="🤖 AI Responses", value=str(data['ai_responses']), inline=True)
+        embed.add_field(name="🆘 Support Escalations", value=str(data['escalations']), inline=True)
+        
+        if data['escalations'] == 0:
+            embed.add_field(
+                name="✅ Result",
+                value="Issue resolved by AI!",
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="👥 Result",
+                value="Support team assisted.",
+                inline=False
+            )
+        
+        embed.set_footer(text="Thanks for using Jaynora AI Support! 💙")
+    
+    await channel.send(embed=embed)
+    stats['tickets_handled'] += 1
+
 @bot.event
 async def on_ready():
     print(f'✅ {bot.user} olarak giriş yapıldı!')
@@ -249,16 +318,36 @@ async def on_ready():
     else:
         print(f"❌ Knowledge base BOŞ!")
     
-    # Bot status
     await bot.change_presence(activity=discord.Game(name="🎮 Jaynora'da sorulara cevap veriyorum!"))
 
 # ⭐ YENİ: Ticket açılınca hoş geldin
 @bot.event
 async def on_guild_channel_create(channel):
     if 'ticket' in channel.name.lower():
-        await asyncio.sleep(2)  # Biraz bekle
-        language = 'tr'  # Varsayılan Türkçe
+        await asyncio.sleep(2)
+        language = 'tr'
+        
+        # Ticket verisini başlat
+        ticket_data[channel.id] = {
+            'created_at': datetime.now(),
+            'message_count': 0,
+            'ai_responses': 0,
+            'escalations': 0,
+            'language': language
+        }
+        
         await send_welcome_message(channel, language)
+        print(f"🎫 Yeni ticket: {channel.name}")
+
+# ⭐ YENİ: Ticket silinince özet gönder
+@bot.event
+async def on_guild_channel_delete(channel):
+    if 'ticket' in channel.name.lower() and channel.id in ticket_data:
+        # Özet başka bir kanala gönderilemez çünkü kanal silindi
+        # Sadece istatistiği güncelle
+        stats['tickets_handled'] += 1
+        del ticket_data[channel.id]
+        print(f"🎫 Ticket silindi: {channel.name}")
 
 @bot.event
 async def on_message(message):
@@ -286,18 +375,44 @@ async def on_message(message):
     if message.channel.id in disabled_channels:
         return
     
+    # ⭐ YENİ: Ticket verisini güncelle
+    if message.channel.id not in ticket_data:
+        ticket_data[message.channel.id] = {
+            'created_at': datetime.now(),
+            'message_count': 0,
+            'ai_responses': 0,
+            'escalations': 0,
+            'language': 'tr'
+        }
+    
+    ticket_data[message.channel.id]['message_count'] += 1
+    
     print(f"💬 Mesaj alındı: {message.author} - {message.content[:50]}...")
     
     # AI yanıt üret
     language = detect_language(message.content)
+    ticket_data[message.channel.id]['language'] = language
     response = await get_ai_response(message.content, language)
     
     # Support etiketleme kontrolü
+    needs_escalation = False
     if SUPPORT_ROLE_ID and ("<@&" not in response):
         if "bilgim yok" in response.lower() or "don't have info" in response.lower():
-            response = response.replace("bilgim yok", f"bilgim yok 💙\n\n<@&{SUPPORT_ROLE_ID}>")
-            response = response.replace("don't have info", f"don't have info 💙\n\n<@&{SUPPORT_ROLE_ID}>")
+            ticket_data[message.channel.id]['escalations'] += 1
             stats['support_escalations'] += 1
+            needs_escalation = True
+            
+            # ⭐ YENİ: 3. escalation'da özel mesaj
+            if ticket_data[message.channel.id]['escalations'] >= 3:
+                if language == 'tr':
+                    response += f"\n\n⚠️ **Dikkat:** Birkaç sorunuza cevap veremedim. <@&{SUPPORT_ROLE_ID}> ekibini çağırıyorum, size daha iyi yardımcı olacaklardır! 💙"
+                else:
+                    response += f"\n\n⚠️ **Notice:** I couldn't answer several questions. Calling <@&{SUPPORT_ROLE_ID}> team, they'll help you better! 💙"
+            else:
+                response = response.replace("bilgim yok", f"bilgim yok 💙\n\n<@&{SUPPORT_ROLE_ID}>")
+                response = response.replace("don't have info", f"don't have info 💙\n\n<@&{SUPPORT_ROLE_ID}>")
+    
+    ticket_data[message.channel.id]['ai_responses'] += 1
     
     await message.reply(response)
     print(f"✅ Cevap gönderildi")
@@ -340,7 +455,19 @@ async def ai_go(ctx):
     disabled_channels.discard(ctx.channel.id)
     await ctx.send("▶️ Bu kanalde AI aktif edildi.")
 
-# ⭐ YENİ: Gelişmiş test komutu
+# ⭐ YENİ: Ticket özeti manuel komut
+@bot.command(name='ai-close')
+async def ai_close(ctx):
+    if 'ticket' not in ctx.channel.name.lower():
+        await ctx.send("⚠️ Bu komut sadece ticket kanallarında kullanılabilir!")
+        return
+    
+    await send_ticket_summary(ctx.channel, ctx.channel.id)
+    
+    # Ticket verisini temizle
+    if ctx.channel.id in ticket_data:
+        del ticket_data[ctx.channel.id]
+
 @bot.command(name='ai-test')
 async def ai_test(ctx):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
@@ -359,6 +486,7 @@ async def ai_test(ctx):
         embed.add_field(name="📊 Knowledge Base", value=kb_status, inline=False)
         embed.add_field(name="🌍 Test Dili", value="🇹🇷 Türkçe", inline=True)
         embed.add_field(name="📈 Toplam Soru", value=str(stats['total_questions']), inline=True)
+        embed.add_field(name="🎫 Ticket İşlendi", value=str(stats['tickets_handled']), inline=True)
         embed.add_field(name="🎯 Test Cevabı", value=test_response[:300] + "...", inline=False)
         embed.set_footer(text="Bot çalışıyor ve hazır! ✅")
         
@@ -366,7 +494,6 @@ async def ai_test(ctx):
     except Exception as e:
         await ctx.send(f"❌ Hata: {str(e)}")
 
-# ⭐ YENİ: İstatistik komutu
 @bot.command(name='ai-stats')
 async def ai_stats(ctx):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
@@ -380,8 +507,10 @@ async def ai_stats(ctx):
     embed.add_field(name="🇹🇷 Türkçe", value=str(stats['turkish_questions']), inline=True)
     embed.add_field(name="🇬🇧 İngilizce", value=str(stats['english_questions']), inline=True)
     embed.add_field(name="🆘 Support Yönlendirme", value=str(stats['support_escalations']), inline=True)
+    embed.add_field(name="🎫 Ticket İşlendi", value=str(stats['tickets_handled']), inline=True)
     embed.add_field(name="⏸️ Kapalı Kanallar", value=str(len(disabled_channels)), inline=True)
-    embed.add_field(name="🎮 Sunucular", value=str(len(bot.guilds)), inline=True)
+    embed.add_field(name="🎮 Aktif Ticketlar", value=str(len(ticket_data)), inline=True)
+    embed.add_field(name="🌐 Sunucular", value=str(len(bot.guilds)), inline=True)
     embed.set_footer(text="Jaynora AI Support 💙")
     
     await ctx.send(embed=embed)
