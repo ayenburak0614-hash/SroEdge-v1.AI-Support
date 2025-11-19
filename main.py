@@ -56,6 +56,10 @@ def add_to_log(entry_type, channel_name, user, message, language, escalated=Fals
 # ⭐ YENİ: Ticket takip sistemi
 ticket_data = {}
 
+# ⭐ YENİ: Mesaj birleştirme sistemi
+user_messages = {}  # {channel_id: {'user_id': user_id, 'messages': [...], 'last_time': datetime, 'task': task}}
+MESSAGE_DELAY = 5  # 5 saniye bekleme
+
 # Knowledge base okuma
 def load_knowledge_base():
     try:
@@ -432,60 +436,113 @@ async def on_message(message):
     
     print(f"💬 Mesaj alındı: {message.author} - {message.content[:50]}...")
     
-    # AI yanıt üret
-    language = detect_language(message.content)
-    ticket_data[message.channel.id]['language'] = language
-    response = await get_ai_response(message.content, language)
+    # ⭐ YENİ: Mesaj birleştirme sistemi
+    channel_id = message.channel.id
+    user_id = message.author.id
     
-    # ⭐ YENİ: Support etiketleme ve AI susturma kontrolü
-    needs_escalation = False
-    response_lower = response.lower()
+    # Bu kanal için mesaj kaydı var mı?
+    if channel_id not in user_messages:
+        user_messages[channel_id] = {
+            'user_id': user_id,
+            'messages': [],
+            'last_time': datetime.now(),
+            'task': None
+        }
     
-    # Bilgim yok veya Support geçiyorsa
-    if ("bilgim yok" in response_lower or 
-        "don't have info" in response_lower or 
-        "i don't have" in response_lower or
-        "supporter" in response_lower or
-        "support" in response_lower):
+    # Farklı kullanıcı mı? (Bir ticket'ta birden fazla kişi olabilir)
+    if user_messages[channel_id]['user_id'] != user_id:
+        # Önceki kullanıcının task'ını iptal et
+        if user_messages[channel_id]['task']:
+            user_messages[channel_id]['task'].cancel()
         
-        needs_escalation = True
-        ticket_data[message.channel.id]['escalations'] += 1
-        stats['support_escalations'] += 1
-        
-        # ⭐ YENİ: AI'ı bu ticket için devre dışı bırak
-        disabled_channels.add(message.channel.id)
-        
-        # Support rolünü etiketle (eğer henüz etiketli değilse)
-        if SUPPORT_ROLE_ID and f"<@&{SUPPORT_ROLE_ID}>" not in response:
-            if language == 'tr':
-                response += f"\n\n<@&{SUPPORT_ROLE_ID}>"
-            else:
-                response += f"\n\n<@&{SUPPORT_ROLE_ID}>"
-        
-        # AI devre dışı mesajı ekle
-        if language == 'tr':
-            response += "\n\n🤖 **Not:** Bu ticket için AI desteğini Support ekibine devraldım. Artık bu kanalda cevap vermeyeceğim. İyi çalışmalar! 💙"
-        else:
-            response += "\n\n🤖 **Note:** I've handed over this ticket to the Support team. I won't respond in this channel anymore. Good luck! 💙"
+        # Yeni kullanıcı için sıfırla
+        user_messages[channel_id] = {
+            'user_id': user_id,
+            'messages': [],
+            'last_time': datetime.now(),
+            'task': None
+        }
     
-    ticket_data[message.channel.id]['ai_responses'] += 1
+    # Mesajı listeye ekle
+    user_messages[channel_id]['messages'].append(message.content)
+    user_messages[channel_id]['last_time'] = datetime.now()
     
-    # ⭐ YENİ: Activity log'a ekle
-    add_to_log(
-        'question',
-        message.channel.name,
-        message.author,
-        message.content,
-        language,
-        needs_escalation
-    )
+    # Önceki task'ı iptal et (yeni mesaj geldi)
+    if user_messages[channel_id]['task']:
+        user_messages[channel_id]['task'].cancel()
     
-    await message.reply(response)
-    print(f"✅ Cevap gönderildi")
+    # Yeni task oluştur (5 saniye sonra cevap ver)
+    async def delayed_response():
+        try:
+            await asyncio.sleep(MESSAGE_DELAY)
+            
+            # Tüm mesajları birleştir
+            combined_message = " ".join(user_messages[channel_id]['messages'])
+            print(f"📦 Mesajlar birleştirildi ({len(user_messages[channel_id]['messages'])} mesaj): {combined_message[:100]}...")
+            
+            # Dil algıla
+            language = detect_language(combined_message)
+            ticket_data[message.channel.id]['language'] = language
+            
+            # AI yanıt üret
+            response = await get_ai_response(combined_message, language)
+            
+            # Support etiketleme ve AI susturma kontrolü
+            needs_escalation = False
+            response_lower = response.lower()
+            
+            if ("bilgim yok" in response_lower or 
+                "don't have info" in response_lower or 
+                "i don't have" in response_lower or
+                "supporter" in response_lower or
+                "support" in response_lower):
+                
+                needs_escalation = True
+                ticket_data[message.channel.id]['escalations'] += 1
+                stats['support_escalations'] += 1
+                
+                # AI'ı bu ticket için devre dışı bırak
+                disabled_channels.add(message.channel.id)
+                
+                # Support rolünü etiketle
+                if SUPPORT_ROLE_ID and f"<@&{SUPPORT_ROLE_ID}>" not in response:
+                    response += f"\n\n<@&{SUPPORT_ROLE_ID}>"
+                
+                # AI devre dışı mesajı ekle
+                if language == 'tr':
+                    response += "\n\n🤖 **Not:** Bu ticket için AI desteğini Support ekibine devraldım. Artık bu kanalda cevap vermeyeceğim. İyi çalışmalar! 💙"
+                else:
+                    response += "\n\n🤖 **Note:** I've handed over this ticket to the Support team. I won't respond in this channel anymore. Good luck! 💙"
+            
+            ticket_data[message.channel.id]['ai_responses'] += 1
+            
+            # Activity log'a ekle
+            add_to_log(
+                'question',
+                message.channel.name,
+                message.author,
+                combined_message,
+                language,
+                needs_escalation
+            )
+            
+            # Cevabı gönder
+            await message.reply(response)
+            print(f"✅ Cevap gönderildi")
+            
+            if needs_escalation:
+                print(f"🔇 AI bu ticket için devre dışı: {message.channel.name}")
+            
+            # Mesaj kaydını temizle
+            user_messages[channel_id]['messages'] = []
+            user_messages[channel_id]['task'] = None
+            
+        except asyncio.CancelledError:
+            print(f"⏱️ Task iptal edildi (yeni mesaj geldi)")
     
-    # ⭐ YENİ: AI devre dışı bırakıldıysa log
-    if needs_escalation:
-        print(f"🔇 AI bu ticket için devre dışı: {message.channel.name}")
+    # Task'ı başlat ve kaydet
+    task = asyncio.create_task(delayed_response())
+    user_messages[channel_id]['task'] = task
 
 # Komutlar
 @bot.command(name='ai-restart')
