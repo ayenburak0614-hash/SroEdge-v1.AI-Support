@@ -21,6 +21,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.messages = True
 intents.guilds = True
+intents.members = True  # ⭐ YENİ: Üye bilgileri için
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Devre dışı kanallar ve istatistikler
@@ -59,6 +60,12 @@ ticket_data = {}
 # ⭐ YENİ: Mesaj birleştirme sistemi
 user_messages = {}  # {channel_id: {'user_id': user_id, 'messages': [...], 'last_time': datetime, 'task': task}}
 MESSAGE_DELAY = 5  # 5 saniye bekleme
+
+# ⭐ YENİ: Manuel öğrenme sistemi için Support mesajlarını kaydet
+support_messages = {}  # {channel_id: [{'user': user, 'content': content, 'timestamp': time, 'user_question': question}]}
+
+# ⭐ YENİ: Mesaj silme onay sistemi
+delete_confirmations = {}  # {message_id: {'user_id': user_id, 'channel': channel, 'type': 'all/number/user', 'target': target}}
 
 # Knowledge base okuma
 def load_knowledge_base():
@@ -386,20 +393,86 @@ async def on_guild_channel_create(channel):
         await send_welcome_message(channel, language)
         print(f"🎫 Yeni ticket: {channel.name}")
 
-# ⭐ YENİ: Ticket silinince özet gönder
+# ⭐ YENİ: Ticket silinince manuel öğrenme sistemi tetikle
 @bot.event
 async def on_guild_channel_delete(channel):
     if 'ticket' in channel.name.lower() and channel.id in ticket_data:
-        # Özet başka bir kanala gönderilemez çünkü kanal silindi
-        # Sadece istatistiği güncelle
         stats['tickets_handled'] += 1
-        del ticket_data[channel.id]
+        
+        # ⭐ YENİ: Manuel öğrenme sistemi tetikle
+        if channel.id in support_messages and support_messages[channel.id]:
+            learning_channel = bot.get_channel(LEARNING_CHANNEL_ID)
+            if learning_channel:
+                support_msgs = support_messages[channel.id]
+                
+                # Her support mesajı için ayrı onay mesajı
+                for idx, support_msg in enumerate(support_msgs, 1):
+                    embed = discord.Embed(
+                        title=f"📚 Yeni Bilgi Öğrenme Talebi #{idx}",
+                        color=0xFFD700
+                    )
+                    embed.add_field(name="🎫 Ticket", value=channel.name, inline=True)
+                    embed.add_field(name="⏰ Tarih", value=support_msg['timestamp'].strftime('%Y-%m-%d %H:%M'), inline=True)
+                    embed.add_field(name="", value="", inline=False)  # Boş satır
+                    
+                    if support_msg.get('user_question'):
+                        embed.add_field(
+                            name="❓ Kullanıcı Sorusu",
+                            value=f"```{support_msg['user_question'][:200]}```",
+                            inline=False
+                        )
+                    
+                    embed.add_field(
+                        name="💬 Support Cevabı",
+                        value=f"👨‍💼 {support_msg['user']}\n```{support_msg['content'][:500]}```",
+                        inline=False
+                    )
+                    
+                    embed.set_footer(text="Bu bilgiyi knowledge base'e eklemek ister misin?")
+                    
+                    msg = await learning_channel.send(embed=embed)
+                    await msg.add_reaction('✅')
+                    await msg.add_reaction('❌')
+                    
+                    print(f"📚 Öğrenme talebi gönderildi: {channel.name} - #{idx}")
+            
+            # Kayıtları temizle
+            del support_messages[channel.id]
+        
+        if channel.id in ticket_data:
+            del ticket_data[channel.id]
+        
         print(f"🎫 Ticket silindi: {channel.name}")
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
+    
+    # ⭐ YENİ: Support mesajlarını kaydet (Manuel öğrenme için)
+    if 'ticket' in message.channel.name.lower():
+        if message.channel.id in disabled_channels:  # AI devre dışı = Support devrede
+            member = message.author
+            if isinstance(member, discord.Member):
+                role_ids = [role.id for role in member.roles]
+                if SUPPORT_ROLE_ID in role_ids:
+                    # Support mesajını kaydet
+                    if message.channel.id not in support_messages:
+                        support_messages[message.channel.id] = []
+                    
+                    # Son kullanıcı sorusunu bul
+                    last_user_question = None
+                    if message.channel.id in user_messages and user_messages[message.channel.id]['messages']:
+                        last_user_question = " ".join(user_messages[message.channel.id]['messages'])
+                    
+                    support_messages[message.channel.id].append({
+                        'user': str(message.author),
+                        'content': message.content,
+                        'timestamp': datetime.now(),
+                        'user_id': message.author.id,
+                        'user_question': last_user_question
+                    })
+                    print(f"📝 Support mesajı kaydedildi: {message.author} - {message.content[:50]}...")
     
     await bot.process_commands(message)
     
@@ -544,6 +617,214 @@ async def on_message(message):
     task = asyncio.create_task(delayed_response())
     user_messages[channel_id]['task'] = task
 
+# ⭐ YENİ: Reaction ile öğrenme ve silme onayı
+@bot.event
+async def on_raw_reaction_add(payload):
+    # Bot'un kendi reaction'ları için işlem yapma
+    if payload.user_id == bot.user.id:
+        return
+    
+    # Mesaj silme onayı kontrolü
+    if payload.message_id in delete_confirmations:
+        confirm_data = delete_confirmations[payload.message_id]
+        
+        # Sadece komutu kullanan kişi onaylayabilir
+        if payload.user_id != confirm_data['user_id']:
+            return
+        
+        channel = confirm_data['channel']
+        
+        try:
+            message = await channel.fetch_message(payload.message_id)
+        except:
+            return
+        
+        # ✅ Onayla - Sil
+        if str(payload.emoji) == '✅':
+            try:
+                if confirm_data['type'] == 'all':
+                    # Tüm mesajları sil
+                    deleted_count = 0
+                    while True:
+                        messages = []
+                        async for msg in channel.history(limit=100):
+                            messages.append(msg)
+                        
+                        if not messages:
+                            break
+                        
+                        await channel.delete_messages(messages)
+                        deleted_count += len(messages)
+                        
+                        if len(messages) < 100:
+                            break
+                    
+                    # Başarı mesajı (geçici)
+                    success_msg = await channel.send(f"✅ **{deleted_count}** mesaj silindi!")
+                    await asyncio.sleep(5)
+                    await success_msg.delete()
+                    
+                    print(f"🗑️ Tüm mesajlar silindi: {deleted_count} mesaj")
+                
+                elif confirm_data['type'] == 'user':
+                    # Kullanıcının mesajlarını sil
+                    target_user_id = confirm_data['target']
+                    deleted_count = 0
+                    
+                    def check_user(m):
+                        return m.author.id == target_user_id
+                    
+                    while True:
+                        deleted = await channel.purge(limit=100, check=check_user)
+                        deleted_count += len(deleted)
+                        
+                        if len(deleted) < 100:
+                            break
+                    
+                    success_msg = await channel.send(f"✅ **{deleted_count}** mesaj silindi!")
+                    await asyncio.sleep(5)
+                    await success_msg.delete()
+                    
+                    print(f"🗑️ Kullanıcı mesajları silindi: {deleted_count} mesaj")
+                
+            except Exception as e:
+                await channel.send(f"❌ Silme hatası: {str(e)}")
+            
+            # Onay kaydını temizle
+            del delete_confirmations[payload.message_id]
+        
+        # ❌ Vazgeç
+        elif str(payload.emoji) == '❌':
+            cancel_embed = discord.Embed(
+                title="❌ İşlem İptal Edildi",
+                description="Mesajlar silinmedi.",
+                color=0x95A5A6
+            )
+            
+            await message.edit(embed=cancel_embed)
+            await message.clear_reactions()
+            
+            # Onay kaydını temizle
+            del delete_confirmations[payload.message_id]
+            
+            print(f"❌ Silme işlemi iptal edildi")
+        
+        return  # Silme işlemi bitti, öğrenme kontrolüne geçme
+    
+    # Learning kanalı kontrolü (Manuel öğrenme sistemi)
+    if payload.channel_id != LEARNING_CHANNEL_ID:
+        return
+    
+    channel = bot.get_channel(payload.channel_id)
+    if not channel:
+        return
+    
+    try:
+        message = await channel.fetch_message(payload.message_id)
+    except:
+        return
+    
+    # Bot'un mesajı mı kontrol et
+    if message.author.id != bot.user.id:
+        return
+    
+    # Embed var mı kontrol et
+    if not message.embeds:
+        return
+    
+    embed = message.embeds[0]
+    
+    # Öğrenme talebi mi kontrol et
+    if "Yeni Bilgi Öğrenme Talebi" not in embed.title:
+        return
+    
+    # ✅ Reaction - Öğren
+    if str(payload.emoji) == '✅':
+        # Support cevabını embed'den al
+        support_answer = None
+        user_question = None
+        
+        for field in embed.fields:
+            if field.name == "💬 Support Cevabı":
+                content = field.value
+                if '```' in content:
+                    parts = content.split('```')
+                    if len(parts) >= 2:
+                        support_answer = parts[1].strip()
+            
+            if field.name == "❓ Kullanıcı Sorusu":
+                content = field.value
+                if '```' in content:
+                    parts = content.split('```')
+                    if len(parts) >= 2:
+                        user_question = parts[1].strip()
+        
+        if support_answer:
+            try:
+                system_prompt = f"""Sen Jaynora AI Support için bilgi düzenleyicisisin.
+
+Görevin: Kullanıcı sorusu ve Support cevabını alıp, knowledge base'e eklenebilir formatta düzenlemek.
+
+FORMAT:
+[CATEGORY: UYGUN_KATEGORI]
+Konu Başlığı:
+- Açıklama
+- Detaylar
+
+Kategoriler: SYSTEM, MAP, EVENTS, UNIQUES, JOBS, RANKINGS, SKILLS, SHOPS, FIXES
+
+Knowledge base'e eklenecek formatı TÜRKÇE oluştur. Kısa ve net ol."""
+
+                if user_question:
+                    prompt = f"Kullanıcı Sorusu:\n{user_question}\n\nSupport Cevabı:\n{support_answer}"
+                else:
+                    prompt = f"Support Cevabı:\n{support_answer}"
+                
+                response = openai.ChatCompletion.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.3,
+                    max_tokens=500
+                )
+                
+                formatted_info = response.choices[0].message.content
+                update_knowledge(formatted_info)
+                
+                success_embed = discord.Embed(
+                    title="✅ Bilgi Öğrenildi!",
+                    description="Knowledge base'e başarıyla eklendi.",
+                    color=0x00FF00
+                )
+                success_embed.add_field(
+                    name="📝 Eklenen Bilgi",
+                    value=f"```{formatted_info[:500]}```",
+                    inline=False
+                )
+                
+                await message.edit(embed=success_embed)
+                await message.clear_reactions()
+                
+                print(f"✅ Bilgi öğrenildi ve eklendi!")
+                
+            except Exception as e:
+                await channel.send(f"❌ Öğrenme hatası: {str(e)}")
+    
+    # ❌ Reaction - Atla
+    elif str(payload.emoji) == '❌':
+        skip_embed = discord.Embed(
+            title="⏭️ Bilgi Atlandı",
+            description="Bu bilgi knowledge base'e eklenmedi.",
+            color=0xFF0000
+        )
+        
+        await message.edit(embed=skip_embed)
+        await message.clear_reactions()
+        
+        print(f"⏭️ Bilgi atlandı")
+
 # Komutlar
 @bot.command(name='ai-restart')
 async def ai_restart(ctx):
@@ -582,7 +863,6 @@ async def ai_go(ctx):
     disabled_channels.discard(ctx.channel.id)
     await ctx.send("▶️ Bu kanalde AI aktif edildi.")
 
-# ⭐ YENİ: Ticket özeti manuel komut
 @bot.command(name='ai-close')
 async def ai_close(ctx):
     if 'ticket' not in ctx.channel.name.lower():
@@ -591,7 +871,6 @@ async def ai_close(ctx):
     
     await send_ticket_summary(ctx.channel, ctx.channel.id)
     
-    # Ticket verisini temizle
     if ctx.channel.id in ticket_data:
         del ticket_data[ctx.channel.id]
 
@@ -655,8 +934,92 @@ async def ailearn(ctx, *, new_info: str):
         except Exception as e:
             await ctx.send(f"❌ Hata: {str(e)}")
 
-# ⭐ YENİ: Admin Panel Komutları
+# ⭐ YENİ: Mesaj silme komutları
+@bot.command(name='ai-delete')
+async def ai_delete(ctx, target=None):
+    """Mesaj silme komutu"""
+    # Sadece ALLOWED_USER_IDS kullanabilir
+    if ctx.author.id not in ALLOWED_USER_IDS:
+        await ctx.send("⛔ Bu komutu kullanma yetkiniz yok!")
+        return
+    
+    if not target:
+        await ctx.send("⚠️ Kullanım: `!ai-delete [sayı]` veya `!ai-delete all` veya `!ai-delete @User`")
+        return
+    
+    # all - Tüm mesajları sil
+    if target.lower() == 'all':
+        embed = discord.Embed(
+            title="⚠️ Tüm Mesajları Sil?",
+            description=f"**{ctx.channel.name}** kanalındaki TÜM mesajlar silinecek!\n\nOnaylıyor musun?",
+            color=0xFF0000
+        )
+        embed.set_footer(text="✅ Onayla | ❌ Vazgeç")
+        
+        msg = await ctx.send(embed=embed)
+        await msg.add_reaction('✅')
+        await msg.add_reaction('❌')
+        
+        # Onay kaydı oluştur
+        delete_confirmations[msg.id] = {
+            'user_id': ctx.author.id,
+            'channel': ctx.channel,
+            'type': 'all',
+            'target': None
+        }
+        
+        print(f"🗑️ Silme onayı bekleniyor: {ctx.author} - ALL messages")
+    
+    # @User - Kullanıcının mesajlarını sil
+    elif ctx.message.mentions:
+        target_user = ctx.message.mentions[0]
+        
+        embed = discord.Embed(
+            title="⚠️ Kullanıcı Mesajlarını Sil?",
+            description=f"**{target_user.mention}** kullanıcısının **{ctx.channel.name}** kanalındaki TÜM mesajları silinecek!\n\nOnaylıyor musun?",
+            color=0xFF6B6B
+        )
+        embed.set_footer(text="✅ Onayla | ❌ Vazgeç")
+        
+        msg = await ctx.send(embed=embed)
+        await msg.add_reaction('✅')
+        await msg.add_reaction('❌')
+        
+        delete_confirmations[msg.id] = {
+            'user_id': ctx.author.id,
+            'channel': ctx.channel,
+            'type': 'user',
+            'target': target_user.id
+        }
+        
+        print(f"🗑️ Silme onayı bekleniyor: {ctx.author} - User {target_user}")
+    
+    # Sayı - Son X mesajı sil
+    else:
+        try:
+            amount = int(target)
+            
+            if amount < 1:
+                await ctx.send("⚠️ Sayı 1'den büyük olmalı!")
+                return
+            
+            if amount > 100:
+                await ctx.send("⚠️ Bir seferde en fazla 100 mesaj silebilirsiniz!")
+                return
+            
+            # Direkt sil (onay gerektirmez)
+            deleted = await ctx.channel.purge(limit=amount + 1)  # +1 = komut mesajı da dahil
+            
+            confirm_msg = await ctx.send(f"✅ {len(deleted)-1} mesaj silindi!")
+            await asyncio.sleep(3)
+            await confirm_msg.delete()
+            
+            print(f"🗑️ {len(deleted)-1} mesaj silindi: {ctx.author} - {ctx.channel.name}")
+            
+        except ValueError:
+            await ctx.send("⚠️ Geçersiz format! Kullanım: `!ai-delete [sayı]` veya `!ai-delete all` veya `!ai-delete @User`")
 
+# Admin Panel Komutları
 @bot.command(name='ai-logs')
 async def ai_logs(ctx):
     """Son aktiviteleri göster"""
@@ -667,7 +1030,6 @@ async def ai_logs(ctx):
         await ctx.send("📋 Henüz log kaydı yok.")
         return
     
-    # Son 10 girişi al
     recent_logs = activity_log[-10:]
     
     embed = discord.Embed(
@@ -704,7 +1066,6 @@ async def ai_knowledge(ctx):
         await ctx.send("❌ Knowledge base yüklenemedi!")
         return
     
-    # Kategorileri say
     categories = kb.count('[')
     lines = kb.count('\n')
     words = len(kb.split())
@@ -720,7 +1081,6 @@ async def ai_knowledge(ctx):
     embed.add_field(name="📅 Son Güncelleme", value="2025-11-19", inline=True)
     embed.add_field(name="✅ Durum", value="Aktif ve Hazır", inline=True)
     
-    # Ana kategoriler
     main_categories = [
         "SYSTEM", "MAP", "EVENTS", "UNIQUES",
         "JOBS", "RANKINGS", "SKILLS", "SHOPS", "FIXES"
@@ -746,18 +1106,14 @@ async def ai_channels(ctx):
         color=0xFF6B6B
     )
     
-    # Aktif ticketlar
     active_tickets = len(ticket_data)
     embed.add_field(name="🎮 Aktif Ticketlar", value=str(active_tickets), inline=True)
     
-    # Devre dışı kanallar
     disabled_count = len(disabled_channels)
     embed.add_field(name="⏸️ Devre Dışı", value=str(disabled_count), inline=True)
     
-    # Toplam ticket işlendi
     embed.add_field(name="✅ Tamamlanan", value=str(stats['tickets_handled']), inline=True)
     
-    # Aktif ticket detayları
     if ticket_data:
         ticket_info = []
         for channel_id, data in list(ticket_data.items())[:5]:
@@ -777,7 +1133,6 @@ async def ai_channels(ctx):
                 inline=False
             )
     
-    # Devre dışı kanallar
     if disabled_channels:
         disabled_info = []
         for channel_id in list(disabled_channels)[:5]:
@@ -801,7 +1156,6 @@ async def ai_system(ctx):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
         return
     
-    # Uptime hesapla
     if stats['bot_start_time']:
         uptime = datetime.now() - stats['bot_start_time']
         hours = uptime.seconds // 3600
@@ -816,22 +1170,18 @@ async def ai_system(ctx):
         color=0x00FF00
     )
     
-    # Bot bilgileri
     embed.add_field(name="🌐 Sunucular", value=str(len(bot.guilds)), inline=True)
     embed.add_field(name="⏰ Uptime", value=uptime_str, inline=True)
     embed.add_field(name="🔋 Durum", value="🟢 Online", inline=True)
     
-    # İstatistikler
     embed.add_field(name="💬 Toplam Soru", value=str(stats['total_questions']), inline=True)
     embed.add_field(name="🇹🇷 Türkçe", value=str(stats['turkish_questions']), inline=True)
     embed.add_field(name="🇬🇧 İngilizce", value=str(stats['english_questions']), inline=True)
     
-    # Performance
     embed.add_field(name="🆘 Escalations", value=str(stats['support_escalations']), inline=True)
     embed.add_field(name="✅ Tickets Handled", value=str(stats['tickets_handled']), inline=True)
     embed.add_field(name="📋 Log Entries", value=str(len(activity_log)), inline=True)
     
-    # Knowledge base
     kb = load_knowledge_base()
     kb_size = f"{len(kb):,} karakter" if kb else "❌ Yok"
     embed.add_field(name="📚 Knowledge Base", value=kb_size, inline=True)
@@ -839,7 +1189,7 @@ async def ai_system(ctx):
     embed.add_field(name="🎮 Active Tickets", value=str(len(ticket_data)), inline=True)
     embed.add_field(name="⏸️ Disabled Channels", value=str(len(disabled_channels)), inline=True)
     
-    embed.set_footer(text=f"Bot Version: 4.0 | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    embed.set_footer(text=f"Bot Version: 5.0 | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     await ctx.send(embed=embed)
 
 @bot.command(name='ai-reset-stats')
@@ -848,7 +1198,6 @@ async def ai_reset_stats(ctx):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
         return
     
-    # Onay mesajı
     embed = discord.Embed(
         title="⚠️ İstatistikleri Sıfırla?",
         description="Tüm istatistikler sıfırlanacak! Emin misiniz?",
@@ -873,7 +1222,6 @@ async def ai_reset_confirm(ctx):
     
     global activity_log
     
-    # İstatistikleri sıfırla
     stats['total_questions'] = 0
     stats['turkish_questions'] = 0
     stats['english_questions'] = 0
@@ -896,7 +1244,6 @@ async def ai_export(ctx):
     if ctx.channel.id != COMMANDS_CHANNEL_ID:
         return
     
-    # JSON formatında rapor oluştur
     report = {
         'timestamp': datetime.now().isoformat(),
         'stats': stats.copy(),
@@ -914,11 +1261,9 @@ async def ai_export(ctx):
         ]
     }
     
-    # Bot start time'ı string'e çevir
     if report['stats']['bot_start_time']:
         report['stats']['bot_start_time'] = report['stats']['bot_start_time'].isoformat()
     
-    import json
     report_json = json.dumps(report, indent=2, ensure_ascii=False)
     
     embed = discord.Embed(
@@ -930,12 +1275,10 @@ async def ai_export(ctx):
     embed.add_field(name="📈 Toplam Soru", value=str(stats['total_questions']))
     embed.add_field(name="🎫 Tickets", value=str(stats['tickets_handled']))
     
-    # JSON'u code block olarak gönder (Discord limiti 2000 karakter)
     if len(report_json) < 1900:
         await ctx.send(embed=embed)
         await ctx.send(f"```json\n{report_json}\n```")
     else:
-        # Çok uzunsa özet gönder
         await ctx.send(embed=embed)
         await ctx.send("⚠️ Rapor çok uzun, özet gönderiliyor...")
         summary = {
@@ -944,8 +1287,6 @@ async def ai_export(ctx):
             'disabled_channels': report['disabled_channels'],
             'recent_activities_count': len(report['recent_activities'])
         }
-        if summary['stats']['bot_start_time']:
-            summary['stats']['bot_start_time'] = summary['stats']['bot_start_time']
         await ctx.send(f"```json\n{json.dumps(summary, indent=2, ensure_ascii=False)}\n```")
 
 bot.run(DISCORD_TOKEN)
