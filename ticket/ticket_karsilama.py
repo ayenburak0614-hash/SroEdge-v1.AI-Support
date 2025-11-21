@@ -26,4 +26,16 @@ async def handle_ticket_creation(bot, message, stats: dict):
     if language == "tr":
         reply = (
             f"👋 Merhaba {user.mention}!\n"
-            "Sorununla ilgili sana yardımcı olmak için b
+            "Sorununla ilgili sana yardımcı olmak için buradayım. 😊\n"
+            "Lütfen yaşadığın problemi mümkün olduğunca detaylı şekilde yaz.\n"
+            "Gerekli yönlendirmeleri yapacağım."
+        )
+    else:
+        reply = (
+            f"👋 Hello {user.mention}!\n"
+            "I'm here to help you with your issue. 😊\n"
+            "Please describe your problem in as much detail as possible.\n"
+            "I will assist you right away."
+        )
+
+    await message.channel.send(reply)
