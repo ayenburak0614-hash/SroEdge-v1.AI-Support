@@ -46,8 +46,10 @@ async def on_message_event(bot, message, config, stats):
     # 2) Ticket açılışı (support kanalında kullanıcı yazınca)
     # ================================
     if "ticket" in channel_name and "closed" not in channel_name:
+
         # Ticket karşılama ve ilk mesaj
-        if len(channel.history(limit=5)) == 0:  # yeni açılmış ticket gibi davranır
+        history = [msg async for msg in channel.history(limit=5)]
+        if len(history) <= 1:   # ÖNEMLİ DÜZELTME ✔
             await handle_ticket_creation(bot, message, stats)
             return
 
@@ -78,5 +80,4 @@ async def on_message_event(bot, message, config, stats):
     # ================================
     # 4) Normal mesajlar (ticket dışında)
     # ================================
-    # AI'ye gönderilecek mesaj yok — ticket dışında cevap verme
     return
