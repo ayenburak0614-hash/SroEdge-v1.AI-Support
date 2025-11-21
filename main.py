@@ -387,34 +387,37 @@ Manuel Güncelleme
 
 
 async def log_learned_info(source: str, formatted_block: str):
-    """
-    Hangi yöntemle öğrenilirse öğrenilsin (komut / update / ticket),
-    ai-logs kanalına sade metin bir özet gönderir.
-    """
+    """Detaylı ai-logs formatı"""
     if AI_LOGS_CHANNEL_ID == 0:
         return
-
     channel = bot.get_channel(AI_LOGS_CHANNEL_ID)
     if channel is None:
         return
-
-    # Log mesajını hazırlayalım
+    import re
+    category_match = re.search(r"\[(.*?)\]", formatted_block)
+    category_name = category_match.group(1) if category_match else "Bilinmeyen_Kategori"
+    lines = formatted_block.splitlines()
+    items = [line.strip()[2:] for line in lines if line.strip().startswith("- ")]
+    if not items:
+        items = [formatted_block.strip()]
     header = "🧠 Bugün çok güzel bilgiler öğrendim!"
     separator = "====================="
-
-    # Biraz kısaltılmış gösterim:
-    preview = formatted_block.strip()
-    if len(preview) > 1500:
-        preview = preview[:1500] + "\n... (kısaltıldı)"
-
-    text = (
-        f"{header}\n"
-        f"{separator}\n"
-        f"- Kaynak: {source}\n"
-        f"{separator}\n"
-        f"{preview}"
-    )
-
+    content_lines = [
+        header,
+        separator,
+        f"📌 **Kategori:** [{category_name}]",
+        f"📥 **Kaynak:** {source}",
+        separator,
+        "📝 **Eklenen / Güncellenen Bilgi:**",
+    ]
+    for item in items:
+        content_lines.append(f"- {item}")
+        content_lines.append(separator)
+    text = "
+".join(content_lines)
+    if len(text) > 1900:
+        text = text[:1800] + "
+... (kısaltıldı)"
     await channel.send(text)
 
 
