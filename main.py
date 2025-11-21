@@ -390,18 +390,23 @@ async def log_learned_info(source: str, formatted_block: str):
     """Detaylı ai-logs formatı"""
     if AI_LOGS_CHANNEL_ID == 0:
         return
+
     channel = bot.get_channel(AI_LOGS_CHANNEL_ID)
     if channel is None:
         return
+
     import re
     category_match = re.search(r"\[(.*?)\]", formatted_block)
     category_name = category_match.group(1) if category_match else "Bilinmeyen_Kategori"
+
     lines = formatted_block.splitlines()
     items = [line.strip()[2:] for line in lines if line.strip().startswith("- ")]
     if not items:
         items = [formatted_block.strip()]
+
     header = "🧠 Bugün çok güzel bilgiler öğrendim!"
     separator = "====================="
+
     content_lines = [
         header,
         separator,
@@ -410,15 +415,20 @@ async def log_learned_info(source: str, formatted_block: str):
         separator,
         "📝 **Eklenen / Güncellenen Bilgi:**",
     ]
+
     for item in items:
         content_lines.append(f"- {item}")
         content_lines.append(separator)
+
     text = "
 ".join(content_lines)
+
     if len(text) > 1900:
         text = text[:1800] + "
 ... (kısaltıldı)"
+
     await channel.send(text)
+
 
 
 # ================================
