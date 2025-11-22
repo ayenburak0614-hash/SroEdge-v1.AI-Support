@@ -1,4 +1,3 @@
-
 import discord
 from discord.ext import commands
 import openai
@@ -6,6 +5,9 @@ import os
 import json
 from datetime import datetime
 import asyncio
+import base64
+import urllib.request
+import urllib.error
 
 # ================================
 #  ENVIRONMENT VARIABLES
@@ -19,6 +21,11 @@ COMMANDS_CHANNEL_ID = int(os.getenv("COMMANDS_CHANNEL_ID", "0"))  # yönetim kom
 AI_LOGS_CHANNEL_ID = int(os.getenv("AI_LOGS_CHANNEL_ID", "0"))    # ai-logs kanalı
 
 ALLOWED_USER_IDS = json.loads(os.getenv("ALLOWED_USER_IDS", "[]"))
+
+# GitHub senkronizasyonu için
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")              # örn: ghp_xxx
+GITHUB_REPO = os.getenv("GITHUB_REPO")                # örn: EmnAOfficial/your-repo
+GITHUB_FILE_PATH = os.getenv("GITHUB_FILE_PATH", "knowledge_base.txt")  # repo içindeki yol
 
 openai.api_key = OPENAI_API_KEY
 
@@ -104,6 +111,82 @@ def append_to_knowledge_base(block: str):
     kb = load_knowledge_base()
     updated = (kb.rstrip() + "\n\n" + block.strip() + "\n").lstrip()
     save_knowledge_base(updated)
+
+
+def sync_knowledge_base_to_github(reason: str = "") -> bool:
+    """
+    Local knowledge_base.txt dosyasını GitHub ile senkronlar.
+    - Env değişkenleri yoksa sessizce pas geçer.
+    - Hata durumlarını sadece loglar.
+    """
+    if not (GITHUB_TOKEN and GITHUB_REPO and GITHUB_FILE_PATH):
+        print("ℹ️ GitHub senkron devre dışı (GITHUB_TOKEN / GITHUB_REPO / GITHUB_FILE_PATH eksik).")
+        return False
+
+    kb_content = load_knowledge_base()
+    if not kb_content:
+        print("ℹ️ Boş knowledge_base GitHub'a gönderilmeyecek.")
+        return False
+
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "User-Agent": "Jaynora-AI-Bot",
+        "Accept": "application/vnd.github+json",
+    }
+
+    # Önce mevcut dosyanın SHA değerini al
+    sha = None
+    try:
+        get_req = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(get_req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            sha = data.get("sha")
+            print("ℹ️ GitHub mevcut dosya bulundu, SHA alındı.")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print("ℹ️ GitHub'da knowledge_base dosyası bulunamadı, yeni oluşturulacak.")
+            sha = None
+        else:
+            try:
+                err_text = e.read().decode("utf-8", errors="ignore")
+            except Exception:
+                err_text = str(e)
+            print(f"❌ GitHub GET hatası: {err_text}")
+            return False
+    except Exception as e:
+        print(f"❌ GitHub GET hatası: {e}")
+        return False
+
+    encoded_content = base64.b64encode(kb_content.encode("utf-8")).decode("utf-8")
+
+    body = {
+        "message": f"AI KB Sync: {reason}"[:100] if reason else "AI KB Sync",
+        "content": encoded_content,
+    }
+    if sha:
+        body["sha"] = sha
+
+    try:
+        put_req = urllib.request.Request(
+            url,
+            headers=headers,
+            data=json.dumps(body).encode("utf-8"),
+            method="PUT",
+        )
+        with urllib.request.urlopen(put_req) as resp:
+            resp.read()
+        print("✅ GitHub knowledge_base senkron tamamlandı.")
+        return True
+    except urllib.error.HTTPError as e:
+        try:
+            err_text = e.read().decode("utf-8", errors="ignore")
+        except Exception:
+            err_text = str(e)
+        print(f"❌ GitHub PUT hatası: {err_text}")
+    except Exception as e:
+        print(f"❌ GitHub PUT hatası: {e}")
+    return False
 
 
 def detect_language(text: str) -> str:
@@ -656,6 +739,8 @@ async def on_message(message: discord.Message):
                     # Yeni bilgiyi formatla ve kaydet
                     formatted = format_new_knowledge(raw_text)
                     append_to_knowledge_base(formatted)
+                    # GitHub senkron
+                    sync_knowledge_base_to_github("learning_channel_auto")
                     await message.add_reaction("✅")
                     await log_learned_info("Update ile Öğrenim", formatted)
                     print(
@@ -835,7 +920,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
                     while True:
                         messages = []
                         async for msg in channel.history(limit=100):
-                            messages.append(msg)
+                           messages.append(msg)
 
                         if not messages:
                             break
@@ -926,6 +1011,8 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
                 data.get("support_answer", ""), data.get("user_question")
             )
             append_to_knowledge_base(formatted)
+            # GitHub senkron
+            sync_knowledge_base_to_github(f"ticket_learn ({data.get('ticket_name')})")
             await msg.edit(
                 content="✅ **Bu ticket'taki bilgi knowledge_base'e eklendi!**",
                 embed=None,
@@ -964,7 +1051,9 @@ async def ai_add(ctx: commands.Context, *, new_info: str):
     try:
         formatted = format_new_knowledge(new_info)
         append_to_knowledge_base(formatted)
-        await ctx.send("✅ Bilgi başarıyla eklendi/güncellendi!")
+        # GitHub senkron
+        sync_knowledge_base_to_github("ai-add")
+        await ctx.send("✅ Bilgi başarıyla eklendi/güncellendi! (Render + GitHub)")
         await log_learned_info("Komut ile Öğrenim (ai-add)", formatted)
     except Exception as e:
         await ctx.send(f"❌ Hata: {str(e)}")
@@ -986,7 +1075,9 @@ async def ai_learn(ctx: commands.Context, *, new_info: str):
 
     formatted = format_new_knowledge(new_info)
     append_to_knowledge_base(formatted)
-    await ctx.send("✅ Bilgi öğrenildi ve knowledge_base'e eklendi!")
+    # GitHub senkron
+    sync_knowledge_base_to_github("ai-learn")
+    await ctx.send("✅ Bilgi öğrenildi ve knowledge_base'e eklendi! (Render + GitHub)")
     await log_learned_info("Komut ile Öğrenim (!ai-learn)", formatted)
     print(f"📚 Komut ile öğrenim (!ai-learn): {ctx.author} - {len(new_info)} karakter")
 
