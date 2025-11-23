@@ -1,3 +1,44 @@
+# === GitHub Sync Integration ===
+import base64
+import requests
+
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_REPO = os.getenv("GITHUB_REPO")
+GITHUB_FILE_PATH = os.getenv("GITHUB_FILE_PATH", "knowledge_base.txt")
+
+def github_get_file():
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        print("GitHub env missing")
+        return None
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    r = requests.get(url, headers=headers)
+    if r.status_code == 200:
+        print("GitHub GET OK")
+        return r.json()
+    print("GitHub GET Error:", r.text)
+    return None
+
+def github_update_file(new_content, sha):
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    data = {"message": "AI KB Sync: ai-learn","content": new_content,"sha": sha}
+    r = requests.put(url, headers=headers, json=data)
+    if r.status_code in (200,201):
+        print("GitHub PUT OK")
+    else:
+        print("GitHub PUT Error:", r.text)
+
+def append_to_kb(text):
+    file = github_get_file()
+    if not file: return
+    old = base64.b64decode(file["content"]).decode()
+    new = old + "\n" + text
+    enc = base64.b64encode(new.encode()).decode()
+    github_update_file(enc, file["sha"])
+# === End GitHub Sync ===
+
+
 import discord
 from discord.ext import commands
 import openai
@@ -28,51 +69,6 @@ GITHUB_REPO = os.getenv("GITHUB_REPO")                # örn: EmnAOfficial/your-
 GITHUB_FILE_PATH = os.getenv("GITHUB_FILE_PATH", "knowledge_base.txt")  # repo içindeki yol
 
 openai.api_key = OPENAI_API_KEY
-
-# ================================
-# GITHUB SYNC CONFIG
-# ================================
-GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO = os.getenv("GITHUB_REPO")
-GITHUB_FILE_PATH = os.getenv("GITHUB_FILE_PATH", "knowledge_base.txt")
-
-import requests, base64, json
-
-def github_get_file():
-    if not GITHUB_TOKEN or not GITHUB_REPO:
-        print("❌ GitHub env eksik, sync çalışmadı.")
-        return None
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    r = requests.get(url, headers=headers)
-    if r.status_code == 200:
-        return r.json()
-    print("❌ GitHub GET Hatası:", r.text)
-    return None
-
-def github_update_file(new_content, sha):
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}"
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    data = {
-        "message": "AI KB Sync: ai-learn",
-        "content": new_content,
-        "sha": sha
-    }
-    r = requests.put(url, headers=headers, data=json.dumps(data))
-    if r.status_code in [200,201]:
-        print("✔ GitHub Sync başarılı")
-    else:
-        print("❌ GitHub PUT Hatası:", r.text)
-
-def append_to_kb(text):
-    file = github_get_file()
-    if not file:
-        return
-    old = base64.b64decode(file["content"]).decode()
-    new = old + "\n" + text
-    encoded = base64.b64encode(new.encode()).decode()
-    github_update_file(encoded, file["sha"])
-
 
 # ================================
 #  BOT SETUP
