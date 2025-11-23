@@ -1,7 +1,20 @@
-# === GitHub Sync Integration ===
+import discord
+from discord.ext import commands
+import openai
+import os
+import json
+from datetime import datetime
+import asyncio
 import base64
+import urllib.request
+import urllib.error
+import os
+import json
 import requests
+import base64
 
+
+# === GitHub Sync Integration ===
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO = os.getenv("GITHUB_REPO")
 GITHUB_FILE_PATH = os.getenv("GITHUB_FILE_PATH", "knowledge_base.txt")
@@ -38,17 +51,6 @@ def append_to_kb(text):
     github_update_file(enc, file["sha"])
 # === End GitHub Sync ===
 
-
-import discord
-from discord.ext import commands
-import openai
-import os
-import json
-from datetime import datetime
-import asyncio
-import base64
-import urllib.request
-import urllib.error
 
 # ================================
 #  ENVIRONMENT VARIABLES
@@ -1630,4 +1632,3 @@ if __name__ == "__main__":
         print("❌ DISCORD_TOKEN bulunamadı! .env dosyasını kontrol et.")
     else:
         bot.run(DISCORD_TOKEN)
-
